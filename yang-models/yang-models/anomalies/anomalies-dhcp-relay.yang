@@ -1,0 +1,114 @@
+module anomalies-dhcp-relay {
+    namespace "http://github.com/sonic-net/anomalies-dhcp-relay";
+    yang-version 1.1;
+    prefix anomalies-dhcp-relay;
+
+    import actions-common {
+        prefix actcmn;
+        revision-date 2022-12-01;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "SONIC dhcp-relay anomalies";
+
+    revision 2022-12-01 {
+        description "dhcp-relay alert anomalies.";
+    }
+
+    grouping dhcp-service-info {
+        leaf service-name {
+            type enumeration {
+                enum "dhcp_relay";
+            }
+            mandatory true;
+            description "Name of associated SONiC service";
+        }
+
+    }
+        
+    container anomalies-dhcp-relay {
+        container dhcp-relay-discard {
+            evtcmn:ALARM_SEVERITY_MAJOR;
+
+            description "
+                Declares an anomaly for dhcp-relay discarding packet on an
+                interface due to missing IP address assigned.
+                Params:
+                    name of the interface discarding.";
+
+            leaf ifname {
+                type string
+                description "Name of the i/f discarding";
+            } 
+
+            uses dhcp-service-info;
+            uses actcmn:actions-cmn;
+            uses actcmn:actions-anomaly-cmn;
+        }
+
+        container dhcp-relay-disparity {
+            evtcmn:ALARM_SEVERITY_MAJOR;
+
+            description "
+                Declares an event for disparity detected in
+                DHCP Relay behavior by dhcpmon.
+                parameters:
+                    vlan that shows this disparity
+                    The duration of disparity";
+
+            leaf vlan {
+                type string {
+                    pattern '(Agg-Vlan|Vlan)([0-9]{1,3}|[1-3][0-9]{3}|[4][0][0-8][0-9]|[4][0][9][0-4])';
+                }
+                description "Name of the vlan affected";
+            }
+
+            leaf duration {
+                type uint32;
+                description "Duration of disparity";
+            }
+
+            uses dhcp-service-info;
+
+            uses actcmn:actions-cmn;
+            uses actcmn:actions-anomaly-cmn;
+        }
+
+        container dhcp-relay-bind-failure {
+            evtcmn:ALARM_SEVERITY_MAJOR;
+
+            description "
+                Declares an event for socket binding failure.
+                parameters:
+                    vlan that shows this failure
+                    type either local or global";
+
+            leaf vlan {
+                type string {
+                    pattern 'Vlan([0-9]{1,3}|[1-3][0-9]{3}|[4][0][0-8][0-9]|[4][0][9][0-4])';
+                }
+                description "Name of the vlan affected";
+            }
+
+            leaf type {
+                type enumeration {
+                    enum "local";
+                    enum "global";
+                }
+                description "Address type";
+            }
+
+            uses dhcp-service-info;
+
+            uses actcmn:actions-cmn;
+            uses actcmn:actions-anomaly-cmn;
+        }
+    }
+}
+

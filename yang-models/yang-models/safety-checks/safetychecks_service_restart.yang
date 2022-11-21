@@ -1,0 +1,54 @@
+module safetychecks-service-restart {
+    namespace "http://github.com/sonic-net/safetychecks-service-restart";
+    yang-version 1.1;
+    prefix safetychecks-service-restart;
+
+    import actions-common {
+        prefix actcmn;
+        revision-date 2022-12-01;
+    }
+
+    import anomalies-dhcp-relay {
+        prefix anmdhcp
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "SONIC service-restart safetychecks";
+
+    revision 2022-12-01 {
+        description "service-restart alert safetychecks.";
+    }
+
+    container safetychecks-service-restart {
+        container service-restart {
+            description "
+                Declares an safetycheck for any service restart.
+                i/p service name";
+
+            leaf service-name {
+                type union {
+                    type leafref {
+                        path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-discard/anmdhcp:service-name";
+                    }
+                    type leafref {
+                        path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-disparity/anmdhcp:service-name";
+                    }
+                    type leafref {
+                        path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-bind-failure/anmdhcp:service-name";
+                    }
+
+                description "Name of the i/f discarding";
+            } 
+
+            uses actcmn:actions-cmn;
+            uses actcmn:action-result-cmn;
+        }
+    }
+}
+

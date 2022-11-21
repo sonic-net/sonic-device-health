@@ -1,0 +1,53 @@
+module local-action-disable {
+    namespace "http://github.com/sonic-net/sonic-action-disable";
+    prefix actdis;
+    yang-version 1.1;
+
+    import ietf-yang-types {
+        prefix yang;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "actions disable definition";
+
+    revision 2022-12-01 {
+        description
+            "disable an action - schema";
+    } 
+
+    container LOCAL-ACTION-DISABLE {
+        description "List of disabled";
+        
+        list DISABLED-LIST {
+
+            key "ACTION-NAME";
+
+            leaf ACTION-NAME {
+                type union {
+                    type enumeration {
+                        enum ALL {
+                            description "All actions are disabled";
+                        }
+                        enum all-mitigations {
+                            description "all mitigation actions are disabled";
+                        }
+                    }
+                    type string {
+                        description "Fully qualified name of the action";
+                    }
+                }
+            }
+            
+            leaf reason {
+                type string;
+                description "Reason for disable";
+            }
+        } 
+    }
+}
