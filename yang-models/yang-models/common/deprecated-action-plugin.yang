@@ -1,3 +1,7 @@
+DEPRECATED
+
+Each plugin process will proactively register one or more plugins at startup
+
 module local-action-plugin {
     namespace "http://github.com/sonic-net/sonic-action-binding";
     prefix evtbnd;
