@@ -66,7 +66,7 @@ module actions-common {
                 as timeout.
                 A 0 value implies no set timeout. Here Engine may use its default
                 timeout.";
-            default: 0;
+            default 0;
         }
 
         leaf heartbeat-interval {
@@ -76,20 +76,33 @@ module actions-common {
                 implying no active anomalies and one for an active anomaly that has
                 mitigation in progress. The active anomaly heartbeat interval will
                 be shorter than one for idle time. An action can do a override.";
-            default: 0;
+            default 0;
         }
     }
 
     grouping action-anomaly-cmn {
+        leaf relative_priority {
+            type uint8;
+            default 0;
+            description "
+                When multiple anomalies are detected at the same time, the
+                relative priority help fix one over another.
+                This is more a common case when multiple are detected while
+                mitigation for one in progress. When the in-progress one completes,
+                next one to mitigate is picked by pri.
+                When more than one share same pri, it might be handled in any order.";
+        }
         leaf mitigation-state {
             type enumeration {
                 enum INIT;
+                enum PENDING;
                 enum IN-PROGRESS;
                 enum COMPLETE;
                 enum NO-LOCAL-MITIGATION;
             }
             description "Anomaly with mitigation available
-                will move as INIT --> [ IN-PROGRESS -->] COMPLETE
+                will move as INIT --> [ PENDING -->] [ IN-PROGRESS -->] COMPLETE
+                PENDING will not be fired, if no other anomaly is in progress.
                 IN-PROGRESS may not be fired, if mitigation is complete before
                 heartbeat duration. If mitigation takes longer than (N * heartbeat-interval)
                 then IN-PROGRESS gets published N times. So one may expect >= 2 count of 
