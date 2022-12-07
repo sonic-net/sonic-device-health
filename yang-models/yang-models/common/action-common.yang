@@ -82,6 +82,24 @@ module actions-common {
                 be shorter than one for idle time. An action can do a override.";
             default 0;
         }
+
+        leaf disable {
+            type boolean;
+            default false;
+            configure true;
+            description "Disable just this action. Disable = true overrides
+                any, including global switch value for disable";
+        }
+
+        leaf mimic {
+            type boolean;
+            default false;
+            configure true;
+            description "
+                Applicable to mitigations only; Run normally but skip making any changes to switch.
+                The action will publish o/p but with return code stating mimicked.
+                This will provide a great way to have dry runs.";
+        }
     }
 
     grouping action-anomaly-cmn {
