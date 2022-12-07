@@ -74,6 +74,13 @@ module anomalies-dhcp-relay {
                 description "Duration of disparity";
             }
 
+
+            leaf min-duration {
+                config true;
+                type uint32;
+                description "Minimum duration to qualify as anomaly";
+            }
+
             uses dhcp-service-info;
 
             uses actcmn:actions-cmn;

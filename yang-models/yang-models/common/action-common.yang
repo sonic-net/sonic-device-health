@@ -21,6 +21,15 @@ module actions-common {
             "Common reusable definitions";
     } 
 
+    typedef action-types {
+        type enumeration {
+            enum anomaly;
+            enum safety-check;
+            enum mitigation;
+        }
+        description "Type of action";
+    }
+
     grouping actions-cmn {
         leaf timestamp {
             type yang:date-and-time;
@@ -45,12 +54,7 @@ module actions-common {
                 No explicit guidelines on the string coining/formatting";
         }
         leaf action-type {
-            type enumeration {
-                enum anomaly;
-                enum safety-check;
-                enum mitigation;
-            }
-            description "Type of action";
+            type action-types
         }
         leaf timeout {
             type uint16;
