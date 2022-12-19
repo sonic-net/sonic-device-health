@@ -1,0 +1,20 @@
+{
+    "README": [
+        "Divides plugins across one or more processes",
+        "key = plugin's language",
+        "members are <proc name>:[<list of plugin paths to be loaded>]",
+        "Each plugin path handles one action",
+        "Type of plugin & name of the action can be learned upon loading"
+    ]
+    "python": {
+        "python_plugin_proc-anomaly": {
+            "anomalies-dhcp-relay:dhcp-relay-disparity": "python_plugins/anomalies/dhcp_relay_disparity_check.py" ,
+            "anomalies-dhcp-relay:dhcp-relay-discard": "python_plugins/anomalies/dhcp_relay_discard_check.py"
+        },
+        "python_plugin_proc-non-anomaly": {
+            "mitigations-service-restart:service-restart": "python_plugins/anomalies/service_restart.py",
+            "mitigations-service-restart:service-restart": "python_plugins/anomalies/service_restart_check.py"
+        }
+    } 
+} 
+

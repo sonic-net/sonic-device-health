@@ -1,0 +1,123 @@
+module local-action-info {
+    namespace "http://github.com/sonic-net/local-action-info";
+    prefix actbnd;
+    yang-version 1.1;
+
+    import ietf-yang-types {
+        prefix yang;
+    }
+
+    import actions-common {
+        prefix cmn;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "actions information";
+
+    revision 2022-12-01 {
+        description
+            "Binding schema";
+    } 
+
+    container LOM_ACTIONS {
+        description "List of actions";
+        
+        list actions-list {
+
+            key "ACTION-NAME";
+
+            leaf ACTION-NAME {
+                type string;
+                description "Fully qualified ame of the action as
+                    <yang module name>:<container name>";
+            }
+
+            uses actions-cmn-config;
+            
+            leaf action-specific {
+                type string;
+                description "JSON string for action specific configurable knobs";
+            }
+        } 
+    }
+
+    container LOM_ACTION_BINDINGS {
+        description "List of bindings";
+
+        list bindings-list {
+            key "ACTION-NAME";
+
+            leaf ACTION-NAME {
+                type leafref {
+                    path "../../LOM_ACTIONS/ACTION-NAME";
+                }
+                description "Name of the action" of the action as
+                    <yang module name>:<container name>";
+            }
+            
+            list bindings {
+                key "sequence"
+                
+                leaf sequence {
+                    type uint8;
+                    description "Order of running. Lower sequence go before higher";
+                }
+        
+                leaf ACTION-NAME {
+                    type leafref {
+                        path "../../LOM_ACTIONS/ACTION-NAME";
+                    }
+                    description "Name of the action" of the action as
+                        <yang module name>:<container name>";
+                }
+            } 
+        } 
+    } 
+
+    container LOM_ACTION_GLOBALS {
+        description "global settings"
+
+        leaf enable-detections {
+            type boolean;
+            description "If true, it implies all anomaly detections are turned off.
+                This overrides action level enabled switch.";
+            default false;
+            
+        }
+
+        leaf enable-mitigations {
+            type boolean;
+            description "If true, it implies all mitigation actions are turned off.
+                This overrides action level enabled switch.";
+            default false;
+        }
+
+        leaf mimic-mitigations {
+            type boolean;
+            description "If true, it implies all mitigation actions run but short stop
+                of making any change in switch.
+                This flag is effective only when mitigations are not disabled";
+            default false;
+        }
+    
+        leaf anomaly-pending-timeout {
+            type uint8;
+            unit seconds;
+            description "An anomaly mitigation should be complete before this timeout;
+                Timeout starts ticking from the time point of detection.
+                completion-eta = timepoint-of-detection + anomaly-pending-timeout
+
+                Any delay due to preceding anomaly or long running safety check
+                or long running mitigation crossing this completion-eta is considered
+                as "Failed". The anomaly completion event will be fired with
+                result as mitigation-aborted.";
+            default 120;
+        }
+    }
+} 

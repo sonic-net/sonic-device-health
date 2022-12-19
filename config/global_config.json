@@ -1,0 +1,10 @@
+{
+    "enable-detections": True,
+    "enable-mitigations": False,
+    "mimic-mitigations": False,
+    "anomaly-pending-timeout": 120
+}
+
+
+
+
