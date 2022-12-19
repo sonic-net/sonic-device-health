@@ -58,6 +58,7 @@ module actions-common {
         }
         leaf timeout {
             type uint16;
+            configure true;
             description "
                 For safety-checks & mitigtions this sets the max time within
                 which the corresponding plugin should return, else the action is
@@ -75,6 +76,7 @@ module actions-common {
 
         leaf heartbeat-interval {
             type uint8;
+            configure true;
             description "
                 Engine has a default heartbeat frequencies as one for idle time
                 implying no active anomalies and one for an active anomaly that has

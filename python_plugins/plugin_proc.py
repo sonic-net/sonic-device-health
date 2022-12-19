@@ -82,10 +82,11 @@ class LoMPluginHolder:
         self.thr = None
         self.response = {}
         self.request = {}
+        self.name = ""
 
         try:
             module = importlib.import_module(module_name)
-            plugin = getattr(module, "LoMPlugin")(config)
+            plugin = getattr(module, "LoMPlugin")(config, do_touch_hearbeat)
             if name != plugin.getName():
                 log_error("Action name mismatch in plugin_procs_actions.conf.json")
                 return
@@ -118,6 +119,9 @@ class LoMPluginHolder:
             return False
         return True
 
+
+    def do_touch_hearbeat(self, instance_id:str):
+        touch_heartbeat(self.name, instance_id)
 
 
     def set_pipe(self, fdR:int, fdW:int):
