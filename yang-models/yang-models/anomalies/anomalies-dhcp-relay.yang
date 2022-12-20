@@ -47,6 +47,13 @@ module anomalies-dhcp-relay {
                 description "Name of the i/f discarding";
             } 
 
+            leaf minCnt {
+                type int
+                description "Minium discards to consider as anomaly"
+                configure true
+                default 100
+            }
+
             uses dhcp-service-info;
             uses actcmn:actions-cmn;
             uses actcmn:actions-anomaly-cmn;

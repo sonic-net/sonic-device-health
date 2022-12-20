@@ -11,13 +11,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-}
 
 /***************************************************
  * Request from client to server                   *
  ***************************************************/
 enum ClientRequestType {
-    CL_REQ_REGISTER_CLIENT = 0,
+    REGISTER_PLUGINS = 0,
+    DEREGISTER_PLUGINS,
+    PLUGIN_HEARTBEAT,
     CLIENT_REQ_COUNT
 };
 
@@ -29,7 +30,7 @@ typedef struct clientRequest {
     ClientRequestType type;
 
     /* Name of the plugin that raises this request. */
-    const char *plugin_name;
+    const char *plugin_proc_name;
 
     /*
      * JSON string of data associated with request
@@ -44,12 +45,7 @@ typedef struct clientRequest {
      *
      *  REGISTER_CLIENT
      *      data:
-     *          [
-     *              "<action name>": {
-     *                      "priority": < Action's relative Pri > 
-     *              },
-     *              ...
-     *          ]
+     *          ["<action name>", ...]
      */
     const char *data;
 
@@ -64,7 +60,7 @@ typedef struct clientResponse {
     ClientRequestType type;
 
     /* Name of the plugin that raised the request. */
-    const char *plugin_name;
+    const char *plugin_proc_name;
 
     /*
      * JSON string of data associated with response.
@@ -112,8 +108,7 @@ int WriteClientRequest (clientRequest_t *request);
  * Read request from client
  * 
  * Input:
- *  type - If non-null, specifies type of request to read.
- *         If specified it ignore/Drop any other request type.
+ *  None
  *  
  * Output:
  *  request - complete request
@@ -122,9 +117,7 @@ int WriteClientRequest (clientRequest_t *request);
  *  Error code, where 0 implies success.
  *
  */
-int ReadClientRequest (
-        ClientRequestType *type,
-        clientRequest_t *request);
+int ReadClientRequest (clientRequest_t *request);
 
 
 /*
@@ -146,25 +139,16 @@ int WriteClientResponse (clientResponse_t response);
  * Read response to client
  *
  * Input:
- *  type:
- *      Optional.
- *      If non null, only read response for given request type
- *
- *  plugin_name:
- *      Optional.
- *      If non null, only read response for given plugin-name.
+ *   None
  *
  * Output:
- *  response - Read response that matches given filter, if any.
+ *  response - Read response for last req
  *
  * Return
  *  0 implies success. Any other non-zero value implies failure.
  *
  */
-int ReadClientResponse (
-        ClientRequestType *type,
-        const char *plugin_name,
-        clientResponse_t *response);
+int ReadClientResponse (clientResponse_t *response);
 
 
 /****************************************************
@@ -172,7 +156,7 @@ int ReadClientResponse (
  ****************************************************/
 
 enum ServerRequestType {
-    SER_REQ_INVOKE_ACTION = 0,
+    ACTION_REQUEST = 0,
     SERVER_REQ_COUNT
 };
 
@@ -185,8 +169,14 @@ typedef struct ServerRequest {
     ServerRequestType type;
 
     /* Name of the plugin that raises this request. */
-    const char *plugin_name;
+    const char *plugin_proc_name;
 
+    /* Name of the action */
+    const char *action;
+
+    /* timeout */
+    int timeout;
+    
     /*
      * JSON string of data associated with request
      * NOTE:
@@ -201,14 +191,11 @@ typedef struct ServerRequest {
      * REQUEST_ACTION
      *  data: 
      *  {
-     *      "Action-name": "<Name of the action to invoke>",
-     *      "context": [
-     *          "<sequence>": {
-     *              "<action name>": { <action's o/p> }
-     *          },
-     *          ...
-     *      ]
-     * }
+     *      "<sequence>": {
+     *          "<action name>": { <action's o/p> }
+     *      },
+     *      ...
+     *  }
      */
     const char *data;
 
@@ -222,7 +209,10 @@ typedef struct ServerResponse {
     ServerRequestType type;
 
     /* Name of the plugin that raised the request. */
-    const char *plugin_name;
+    const char *plugin_proc_name;
+
+    /* Name of the action */
+    const char *action;
 
     /*
      * JSON string of data associated with response.
@@ -291,7 +281,7 @@ int WriteServerRequest (ServerRequest_t *request);
  */
 int ReadServerRequest (
         ServerRequestType *type,
-        const char *plugin_name,
+        const char *plugin_proc_name,
         ServerRequest_t *request);
 
 
@@ -330,4 +320,8 @@ int ReadServerResponse (
         ServerResponse_t *response);
 
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif  // _SERVER_H_

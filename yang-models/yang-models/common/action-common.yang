@@ -30,6 +30,62 @@ module actions-common {
         description "Type of action";
     }
 
+    grouping actions-cmn-config {
+        leaf timeout {
+            type uint16;
+            units seconds;
+            configure true;
+            description "
+                For safety-checks & mitigtions this sets the max time within
+                which the corresponding plugin should return, else the action is
+                aborted.
+                For anomalies, this sets the max wait time to kick off the mitigation
+                run. Normally the mitigation/safety-checks kicks off instantly, but
+                if another miitigation is running, this stay in pending state for 
+                max time as this timeout. If mitigation is not kicked off, the
+                run is aborted and failure to mitigate is published stating reason
+                as timeout.
+
+                <= 0 - No timeout
+                > 0 - Time to complete in seconds
+                timeout.";
+            default 0;
+        }
+
+        leaf heartbeat-interval {
+            type uint8;
+            configure true;
+            description "
+                Engine has a default heartbeat frequencies as one for idle time
+                implying no active anomalies and one for an active anomaly that has
+                mitigation in progress. The active anomaly heartbeat interval will
+                be shorter than one for idle time. An action can do a override.";
+            default 0;
+        }
+
+        leaf disable {
+            type boolean;
+            default false;
+            configure true;
+            base-entity true;
+            description "Disable just this action. Disable = true overrides
+                any, including global switch value for disable.
+                base-entity implies that it is not part of action specific param.";
+        }
+
+        leaf mimic {
+            type boolean;
+            default false;
+            configure true;
+            base-entity true;
+            description "
+                Applicable to mitigations only; Run normally but skip making any changes to switch.
+                The action will publish o/p but with return code stating mimicked.
+                This will provide a great way to have dry runs.
+                base-entity implies that it is not part of action specific param.";
+        }
+    }
+
     grouping actions-cmn {
         leaf timestamp {
             type yang:date-and-time;
@@ -56,51 +112,14 @@ module actions-common {
         leaf action-type {
             type action-types
         }
-        leaf timeout {
-            type uint16;
-            configure true;
-            description "
-                For safety-checks & mitigtions this sets the max time within
-                which the corresponding plugin should return, else the action is
-                aborted.
-                For anomalies, this sets the max wait time to kick off the mitigation
-                run. Normally the mitigation/safety-checks kicks off instantly, but
-                if another miitigation is running, this stay in pending state for 
-                max time as this timeout. If mitigation is not kicked off, the
-                run is aborted and failure to mitigate is published stating reason
-                as timeout.
-                A 0 value implies no set timeout. Here Engine may use its default
-                timeout.";
-            default 0;
-        }
 
-        leaf heartbeat-interval {
-            type uint8;
-            configure true;
-            description "
-                Engine has a default heartbeat frequencies as one for idle time
-                implying no active anomalies and one for an active anomaly that has
-                mitigation in progress. The active anomaly heartbeat interval will
-                be shorter than one for idle time. An action can do a override.";
-            default 0;
-        }
+        uses actions-cmn-config;
 
-        leaf disable {
-            type boolean;
-            default false;
-            configure true;
-            description "Disable just this action. Disable = true overrides
-                any, including global switch value for disable";
-        }
-
-        leaf mimic {
-            type boolean;
-            default false;
-            configure true;
-            description "
-                Applicable to mitigations only; Run normally but skip making any changes to switch.
-                The action will publish o/p but with return code stating mimicked.
-                This will provide a great way to have dry runs.";
+        leaf manual-invoke {
+            type boolean
+            default False;
+            description "An action can be manually requested. This flag distinguishes
+                between auto/manual run";
         }
     }
 

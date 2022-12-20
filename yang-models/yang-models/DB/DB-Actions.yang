@@ -2,6 +2,7 @@ module local-action-info {
     namespace "http://github.com/sonic-net/local-action-info";
     prefix actbnd;
     yang-version 1.1;
+    configure true
 
     import ietf-yang-types {
         prefix yang;
@@ -106,7 +107,7 @@ module local-action-info {
             default false;
         }
     
-        leaf anomaly-pending-timeout {
+        leaf max-mitigation-timeout {
             type uint8;
             unit seconds;
             description "An anomaly mitigation should be complete before this timeout;
@@ -118,6 +119,20 @@ module local-action-info {
                 as "Failed". The anomaly completion event will be fired with
                 result as mitigation-aborted.";
             default 120;
+        }
+
+        leaf heartbeat-idle {
+            type uint8;
+            unit seconds;
+            description "Interval between two heartbeats in idle time.";
+            default 10;
+        }
+
+        leaf heartbeat-active {
+            type uint8;
+            unit seconds;
+            description "Interval between two heartbeats while active anomaly being mitigated.";
+            default 10;
         }
     }
 } 
