@@ -170,7 +170,7 @@ module actions-common {
             type uint32;
             description "Actionj run result";
         }
-        leaf restult-string {
+        leaf result-string {
             type string;
             description "Human readable result as string";
         }

@@ -7,6 +7,12 @@ from typing import NamedTuple
 
 GLOBAL_RC_FILE = "/etc/LoM/global.rc.json"
 
+test_run = os.getenv("TESTMODE") != None
+if test_run:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test_lib"))
+    import test_client
+    log_debug("Running in test mode")
+
 from enum import Enum
 
 Vendor_subdir = "vendors"
@@ -174,6 +180,10 @@ def get_actions_binding_conf(action_name:str) -> {}:
 
 _clib_dll = None
 
+
+"""
+Dropping all structs -- Just int & char *
+
 class C_ActionRequest(Structure):
     _fields_ = [
             ("action_name",ctypes.c_char_p),
@@ -188,57 +198,69 @@ class C_ActionResponse(Structure):
             ("action_data",ctypes.c_char_p),
             ("result_code", ctypes.c_short),
             ("result_str",ctypes.c_char_p)]
+"""
 
 def c_lib_init(fl: str) -> bool:
     global _clib_dll
 
-    try:
-        _clib_dll = ctypes.CDLL(fl)
-    except OSError as e:
-        log_error("Failed to load CDLL {} err: {}".format(fl, str(e)))
-        return False
+    if not test_run:
+        try:
+            _clib_dll = ctypes.CDLL(fl)
+        except OSError as e:
+            log_error("Failed to load CDLL {} err: {}".format(fl, str(e)))
+            return False
 
-    try:
-        _clib_get_last_error = _clib_dll.get_last_error
-        _clib_get_last_error.argtypes = []
-        _clib_get_last_error.restype = c_int
+        try:
+            _clib_get_last_error = _clib_dll.get_last_error
+            _clib_get_last_error.argtypes = []
+            _clib_get_last_error.restype = c_int
 
-        _clib_get_last_error_str = _clib_dll.get_last_error_str
-        _clib_get_last_error_str.argtypes = []
-        _clib_get_last_error_str.restype = c_char_p
+            _clib_get_last_error_str = _clib_dll.get_last_error_str
+            _clib_get_last_error_str.argtypes = []
+            _clib_get_last_error_str.restype = c_char_p
 
-        _clib_register_client = _clib_dll.register_client
-        _clib_register_client.argtypes = [ c_char_p ]
-        _clib_register_client.restype = c_int
+            _clib_register_client = _clib_dll.register_client
+            _clib_register_client.argtypes = [ c_char_p ]
+            _clib_register_client.restype = c_int
 
-        _clib_register_plugin = _clib_dll.register_plugin
-        _clib_register_plugin.argtypes = [ c_char_p ]
-        _clib_register_plugin.restype = c_int
+            _clib_register_action = _clib_dll.register_action
+            _clib_register_action.argtypes = [ c_char_p ]
+            _clib_register_action.restype = c_int
 
-        _clib_deregister_client = _clib_dll.deregister_client
-        _clib_deregister_client.argtypes = [ c_char_p ]
-        _clib_deregister_client.restype = c_int
+            _clib_deregister_client = _clib_dll.deregister_client
+            _clib_deregister_client.argtypes = [ c_char_p ]
+            _clib_deregister_client.restype = c_int
 
-        _clib_touch_heartbeat = _clib_dll.touch_heartbeat
-        _clib_touch_heartbeat.argtypes = [ c_char_p, c_char_p ]
-        _clib_touch_heartbeat.restype = c_int
+            _clib_touch_heartbeat = _clib_dll.touch_heartbeat
+            _clib_touch_heartbeat.argtypes = [ c_char_p, c_char_p ]
+            _clib_touch_heartbeat.restype = c_int
 
-        _clib_read_action_request = _clib_dll.read_action_request
-        _clib_read_action_request.argtypes = [ POINTER(C_ActionRequest) ]
-        _clib_read_action_request.restype = c_int
+            _clib_read_action_request = _clib_dll.read_action_request
+            _clib_read_action_request.argtypes = []
+            _clib_read_action_request.restype = c_char_p
 
-        _clib_write_action_response = _clib_dll.write_action_response
-        _clib_write_action_response.argtypes = [ POINTER(C_ActionResponse) ]
-        _clib_write_action_response.restype = c_int
+            _clib_write_action_response = _clib_dll.write_action_response
+            _clib_write_action_response.argtypes = [ c_char_p ]
+            _clib_write_action_response.restype = c_int
 
-        _clib_poll_for_data = _clib_dll.poll_for_data
-        _clib_poll_for_data.argtypes = [ POINTER(c_int), c_int, c_int ]
-        _clib_poll_for_data.restype = c_int
+            _clib_poll_for_data = _clib_dll.poll_for_data
+            _clib_poll_for_data.argtypes = [ POINTER(c_int), c_int, c_int ]
+            _clib_poll_for_data.restype = c_int
 
-    except Exception as e:
-        log_error("Failed to load functions from CDLL {} err: {}".format(fl, str(e)))
-        _clib_dll = None
-        return False
+        except Exception as e:
+            log_error("Failed to load functions from CDLL {} err: {}".format(fl, str(e)))
+            _clib_dll = None
+            return False
+    else:
+        _clib_get_last_error = test_client.get_last_error
+        _clib_get_last_error_str = test_client.get_last_error_str
+        _clib_register_client = test_client.register_client
+        _clib_deregister_client = test_client.deregister_client
+        _clib_register_action = test_client.register_action
+        _clib_touch_heartbeat = test_client.touch_heartbeat
+        _clib_read_action_request = test_client.read_action_request
+        _clib_write_action_response = test_client.write_action_response
+        _clib_poll_for_data = test_client.poll_for_data
 
     return True
 
@@ -246,13 +268,16 @@ def c_lib_init(fl: str) -> bool:
 def validate_dll():
     if not _clib_dll:
         log_error("CLib is not loaded. Failed.")
-        return False
+        return test_run
     return True
 
 
+def get_last_error(): -> (err: int, errstr: str):
+    return _clib_get_last_error(), _clib_get_last_error_str()
+
+
 def print_clib_error(m:str, ret:int):
-    err = _clib_get_last_error()
-    estr = _clib_get_last_error_str()
+    err, estr = get_last_error()
     log_error({}: ret:{} last_error:{} ({})".format(m, ret, err, estr))
 
 
@@ -267,13 +292,13 @@ def register_client(proc_id: str) -> bool:
     return True
 
 
-def register_plugin(action: str) -> bool:
+def register_action(action: str) -> bool:
     if not validate_dll():
         return False, {}
 
-    ret = _clib_register_plugin(action.encode("utf-8"))
+    ret = _clib_register_action(action.encode("utf-8"))
     if ret != 0:
-        print_clib_error("register_plugin failed", ret)
+        print_clib_error("register_action failed", ret)
         return False
     return True
 
@@ -311,27 +336,29 @@ def read_action_request() -> bool, ActionRequest:
     if not validate_dll():
         return False, {}
 
-    rt = C_ActionRequest()
-    ret = _clib_read_action_request(rt)
+    req = _clib_read_action_request().decode("utf-8")
 
-    if ret != 0:
-        print_clib_error("read_action_reques failed", ret)
-        return False, {}
+    if not req:
+        e, estr = get_last_error()
+        if e:
+            print_clib_error("read_action_request failed", 0)
+        return False, None
 
+    d = json.loads(req)
     return True, ActionRequest(
-            rt.action_name.decode("utf-8"),
-            rt.instance_id.decode("utf-8"),
-            rt.context.decode("utf-8"),
-            rt.timeout)
+            d.get("action_name", "")
+            d.get("instance_id", "")
+            d.get("context", "")
+            d.get("timeout, 0))
 
 
 
 class ActionResponse:
-    def __init__(action_name:str="",
+    def __init__(action_name:str,
             instance_id:str,
             action_data: str,
             result_code:int,
-            result_str:str) :
+            result_str:st) :
         self.action_name = action_name
         self.instance_id = instance_id
         self.action_data = action_data
@@ -343,14 +370,14 @@ def write_action_response(res: ActionResponse) -> bool
     if not validate_dll():
         return False
 
-    rt = C_ActionResponse(
-            action_name = res.action_name.encode("utf-8"),
-            instance_id = res.instance_id.encode("utf-8"),
-            action_data = res.action_data.encode("utf-8"),
-            result_code = res.result_code,
-            result_str  = res.result_str.encode("utf-8"))
-
-    ret = _clib_write_action_response(rt)
+    ret = _clib_write_action_response(
+            json.dumps({
+                "action_name": res.action_name,
+                "instance_id": res.instance_id,
+                "action_data": res.action_data,
+                "result_code": res.result_code,
+                "result_str": res.result_str
+            }).encode("utf-8"))
 
     if ret != 0:
         print_clib_error("write_action_response failed", ret)

@@ -52,6 +52,10 @@ sigterm_raised = False
 vendor = vendorType.UNKNOWN
 
 
+# Register signal in global variable
+# Anything but SIGTERM is used for re-reading config
+# The handler is only registered for SIGHUP & SIGTERM
+#
 signal_handler(signum, frame):
     global signal_raised, sigterm_raised
     signal_raised = True
@@ -72,17 +76,36 @@ class LoMPluginHolderFailure(Exception):
         super().__init__(self.message)
 
 
+# Handles a plugin.
+# A plugin is per action.
+# Mostly managed by main thread.
+# Asynchronous request alone is handled in a dedicated thread.
+# Hence each instance of a class may have a thread running if request is called
+# and yet to complete.
+# The request-thread indicates its completion via pipe fd.
+# Main thread createa a pipe per LoM instance.
+# Main thread listens/read on read-end of pipe, the request thread writes
+# when attached plugins return from request call and this thread exits.
+# Hence when main thread receives signal via pipe, the request thread will not 
+# be alive.
+#
 class LoMPluginHolder:
 
     def __init__(self, name:str, plugin_file:str, config: {}):
+       
         module_name = ".".join(plugin_file.split(".")[0:-1])
-        self.plugin = None
-        self.fdR = None
-        self.fdW = None
-        self.thr = None
-        self.response = {}
-        self.request = {}
-        self.name = ""
+       
+        self.plugin = None      # Loaded plugin object
+        self.fdR = None         # Pipe read-end to receive signal from request called thread
+        self.fdW = None         # Pipe write-end written by req thread when plugin
+                                # returns from request call.
+        self.thr = None         # Thread object. Exists only when a req is outstanding
+                                # until the main thread receives signal from the thread
+                                # Main thread call join and reset to None
+        self.response = None    # Response returned by plugin for the request
+                                # Arrives via the req thread.
+        self.request = {}       # Last request sent to plugin
+        self.name = ""          # Name of the action handled by this plugin
 
         try:
             module = importlib.import_module(module_name)
@@ -115,74 +138,121 @@ class LoMPluginHolder:
 
 
     def is_valid(self):
+        # If valid, the plugin object exists
+        # Thread neutral -- Anyone may call
+        #
         if not self.plugin:
             return False
+
+        if self.plugin_timeout:
+            log_error("{}:request has and still timed out".format(self.name))
+            return False
+
         return True
 
 
     def do_touch_hearbeat(self, instance_id:str):
+        # Call back from loaded plugin.
+        # It is passed as callable to plugin.
+        # It is expected to call periodically when it is blocking
+        # on request call.
+        # 
+        # Hence called from request thread.
+        #
         touch_heartbeat(self.name, instance_id)
 
 
     def set_pipe(self, fdR:int, fdW:int):
+        # Called by main thread as part of initializing this instance
+        # for future signalling, when request will be called on plugin.
+        #
+        # This is called only from main thread.
+        #
         if self.fdW != None:
             raise LoMPluginHolderFailure("Internal: Duplicate set_pipe")
 
-        self.fdW = fdW
-        self.fdR = fdR
+        self.fdW = fdW      # Write end of os.pipe
+        self.fdR = fdR      # Read  end of os.pipe
         return
 
 
     def _raise_signal(self):
+        # Called from request thread upon plugin returning from request
+        # call to indicate to main thread.
+        #
         os.write(self.fdW, b"Hello")
         return
 
 
     def _run_request(self):
+        # Starting method of the request thread.
         # Running in a dedicated thread. So make a blocking call.
         #
         self.response = self.plugin.request(self.request)
-        _raise_signal()
+
+        _raise_signal()     # Inform the completion
+
         log_info("{}: Completed request".format(self.name))
+
+        # request thread terminates upon return.
         return
 
 
     def handle_response(self):
-        if not chk_thread:
+        # Called from main thread, upon receiving signal
+        #
+        if not chk_thread_done():
             log_error("{}: Internal error: thread is not done in handle_response".format(
                 self.name))
             return
 
-        if not self.response:
-            log_error("{}: Internal error: empty response".format(
-                self.name))
-            return
-
+        # Write response to backend server/engine.
+        #
         write_action_response(self.response)
 
 
-    def chk_thread(self) -> bool:
+    def chk_thread_done(self) -> bool:
+        # Called from main thread to check on req thread if
+        # completed or not.
+        # Return false if running
+        # Else thread is joined, cleared and any signal written
+        # is cleared
+        #
         if self.thr:
             if self.thr.is_alive():
-                # Formal closing
-                self.thr.join(0)
-            if not self.thr.is_alive():
-                self.thr = None
+                # Request thread has not completed yet.
+                if self.plugin_timeout:
+                    log_error("{}:request has and still timed out".format(self.name))
+                return False
+
+            # Join to formally close
+            #
+            self.thr.join(0)
+            self.thr = None
+
+        self.plugin_timeout = False
 
         # reset the signal, if any
+        # Check before making blocking read, as it might have
+        # already got cleared. Read w/o data will block.
+        #
         r, _, _ = select.select([fdR], [], [], 0)
         if fdR in r:
             os.read(fdR, 100)
 
-        return self.thr == None
+        return True
 
 
     def request(self, req:ActionRequest):
-        
-        if not chk_thread():
+        # Called by main thread upon receiving request call to 
+        # this plugin from the backend engine / server.
+        #
+        if not chk_thread_done():
             log_error("{}: request dropped as busy with previous".format(self.name))
             return
 
+        # Kick off thread to raise request to loaded plugin as blocking.
+        #
         self.response = {}
         self.thr = threading.Thread(target=self._run_request)
         self.thr.start()
@@ -197,28 +267,42 @@ class LoMPluginHolder:
             r, _, _ = select.select([fdR], [], [], self.request.timeout)
             if fdR in r:
                 handle_response()
+            else:
+                self.plugin_timeout = True
+                log_error("{}:request has and still timed out".format(self.name))
+        return
 
 
 
 
-def handle_server_request(active_plugins: {}):
+def handle_server_request(active_plugin_holders: {}):
     ret, req = read_action_request()
+    action_name = req.action_name
     if not ret:
         log_error("Failed to read server request upon poll") 
         return
-     active_plugins[req.action_name].request(req)
-     return
+    if action_name not in active_plugin_holders:
+        log_error("requested action {} is not loaded".format(action_name))
+        return
+
+    plugin_holder = active_plugin_holders[action_name]
+    if not plugin_holder.is_valid():
+        log_error("{} is not in valid state to accept request".format(action_name))
+        return
+
+    plugin_holder.request(req)
+    return
 
 
-def handle_plugin(plugin: LoMPlugin):
-    plugin->handle_response()
+def handle_plugin_holder(plugin_holder: LoMPluginHolder):
+    plugin_holder->handle_response()
     return
 
 
 def main_run(proc_name: str):
 
     pipe_list = {}
-    active_plugins = {}
+    active_plugin_holders = {}
 
     while not is_running_config_available():
         # Loop until we get the conf
@@ -238,15 +322,15 @@ def main_run(proc_name: str):
             conf = actions_conf.get(name, {})
             disabled = conf.get("disable", True)
             if not disabled:
-                plugin = LoMPluginHolder(name, path, conf)
-                if plugin.isValid():
+                pluginHolder = LoMPluginHolder(name, path, conf)
+                if pluginHolder.isValid():
                     fdR, fdW = os.pipe()
-                    plugin.set_pipe(fdR, fdW)
+                    pluginHolder.set_pipe(fdR, fdW)
                 else:
                     log_error("Failed to register plugin {} from {}".format(
                         name, path))
 
-                active_plugins[name] = plugin
+                active_plugin_holders[name] = pluginHolder
                 pipe_list[fdR] = name
             else:
                 log_error("Skipped disabled plugin {}".format(name)) 
@@ -255,15 +339,15 @@ def main_run(proc_name: str):
 
     while not signal_raised:
         # 
-        isRequest, fd = poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
+        ret = poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
 
-        if isRequest:
-            handle_server_request(active_plugins)
-        else:
-            if not fd in pipe_list:
-                log_error("INTERNAL ERROR: fd {} not in pipe list".format(fd))
+        if ret == -1:
+            handle_server_request(active_plugin_holders)
+        elif ret >= 0:
+            if not ret in pipe_list:
+                log_error("INTERNAL ERROR: fd {} not in pipe list".format(ret))
             else:
-                handle_plugin(pipe_list[fd])
+                handle_plugin_holder(pipe_list[ret])
     # SIGHUP will cause a reload of everything.
     deregister_client(proc_name)
     return
@@ -294,13 +378,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-    
-
-
-
 
 

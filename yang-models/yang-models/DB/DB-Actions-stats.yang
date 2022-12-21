@@ -1,0 +1,53 @@
+module local-action-info {
+    namespace "http://github.com/sonic-net/local-action-status";
+    prefix actbnd;
+    yang-version 1.1;
+    configure true
+
+    import ietf-yang-types {
+        prefix yang;
+    }
+
+    import actions-common {
+        prefix cmn;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "actions information";
+
+    revision 2022-12-01 {
+        description
+            "Binding schema";
+    } 
+
+    container LOM_ACTIONS_STATUS {
+        description "List of actions";
+        
+        list actions-list {
+
+            key "ACTION-NAME";
+
+            leaf ACTION-NAME {
+                type string;
+                description "Fully qualified ame of the action as
+                    <yang module name>:<container name>";
+            }
+
+            leaf enabled {
+                type boolean;
+                description "status as enabled or not";
+            }
+
+            leaf last-heartbeat {
+                type yang:date-and-time;
+                description "Timestamp of last heartbeat";
+            }
+        } 
+    }
+} 

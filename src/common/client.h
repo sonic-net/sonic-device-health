@@ -134,6 +134,10 @@ void deregister_client(const char *plugin_proc_id);
 void touch_heartbeat(const char *action, const char *instance_id);
 
 
+#if 0
+
+    DROP START
+
 struct action_request {
     /* Name of the action being requested */
     const char *action_name;
@@ -154,23 +158,6 @@ struct action_request {
      */
     const char *context;
 };
-
-/*
- * Read Action request
- *
- * Input:
- *  None
- *
- * Output:
- *  req - Filled with request data
- *
- * Return
- *  0 for sucess or timeout
- *      On timeout, the req object will be empty
- *  !=0 implies failure
- */
-int read_action_request(action_request *req);
-
 
 struct action_response {
     const char *action_name;
@@ -196,12 +183,60 @@ struct action_response {
     int result_str;
 };
 
+int read_action_request(action_request *req);
+int write_action_response(action_response *res);
+
+    DROP END
+
+#endif
+
+
+/*
+ * Read Action request
+ * Json string
+ * {
+ *      "action_name": "<Name>",
+ *      "instance_id": "<id>",
+ *      "context": "<JSON string of context>",
+ *      "timeout" : <TImeout for the request>
+ *  }
+ *  context -- JSON string of
+ *  [
+ *      { <action name> : <action data per schema> }
+ *      ...
+ *  ]
+ *  Order in list matches order of invocation
+ *
+ * Input:
+ *  None
+ *
+ * Output:
+ *
+ * Return
+ *  Empty string on error / timeout.
+ *  Use get_last_error() for err code
+ *      0 for sucess or timeout
+ *      !=0 implies failure
+ */
+const char *read_action_request();
+
 
 /*
  * Write Action response
  *
  * Input:
  *  res - response being returned.
+ * Json string
+ * {
+ *      "action_name"   : "<Name>",
+ *      "instance_id"   : "<id>",
+ *      "action_data"   : "data as spewed by action as result",
+ *      "result_code"   : <Result code of peocessing the request>
+ *      "result_code"   : <Result code of peocessing the request>
+ *      "result_str"    : <Human readabloe string of result code >
+ *  }
+ *  "action_data" -- JSON string as per action schema devoid of common
+ *          attributes
  *
  * Output:
  *  None
@@ -210,7 +245,7 @@ struct action_response {
  *  0 for sucess
  *  !=0 implies failure
  */
-int write_action_response(action_response *res);
+int write_action_response(const char *res);
 
 
 /*
