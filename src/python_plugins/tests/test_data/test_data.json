@@ -1,0 +1,85 @@
+{
+    "default": {
+        "global_rc": {
+            "config-running-path":  "/tmp",
+            "config-static-path":  ".,/config/",
+            "global_rc_name":  "globals.rc.json",
+            "proc_plugins_conf_name":  "proc_plugins.json",
+            "actions_config_name": "actions_conf.json",
+            "actions_binding_config_name": "actions_binding.json"
+        }
+    }
+    "test_cases": {
+        "test-0": {
+            "_description": "Key 'test-0' is test case name.",
+            "actions-config": {
+                "_description": [
+                   "Action names should start with alpha [a-z]"
+                ], 
+                "test-0-action-0": {
+                    "action-name": "test-0-action-0",
+                    "heartbeat_interval": 2,
+                    "action_resp": {
+                        "foo": "foo_0",
+                        "id" : 0
+                    },
+                    "action_pause": 6
+                },
+                "test-0-action-1": {
+                    "action-name": "test-0-action-1",
+                    "heartbeat_interval": 2,
+                    "action_resp": {
+                        "bar": "foo_1",
+                        "index" : 7
+                    },
+                    "action_pause": 0
+                },
+                "test-0-action-0": {
+                    "action-name": "test-0-action-0",
+                    "heartbeat_interval": 2,
+                    "action_resp": {
+                        "hello": "world",
+                        "cnt" : 99
+                    },
+                    "action_pause": 8
+                }
+            }
+            "procs_config": {
+                "_description": [
+                    "Proc name must end in "_" followed by unique number",
+                    "This is needed to use test_client lib"
+                ],
+                "proc_0": {
+                    "test-0-action-0": "test_action.py",
+                    "test-0-action-1": "test_action.py",
+                    "test-0-action-2": "test_action.py"
+                }
+            }
+            "bindings_config": {
+                "test-0-action-0": [ "test-0-action-1", "test-0-action-2"]
+            }
+            "test_plugin_data": {
+                "_description":  [
+                    "Test data for test plugins. Optional",
+                    "test-main loads these data into globals with",
+                    "key as action-name. The test plugin uses it as its data",
+                    "This way test main knows what to expect",
+                    "Completely optional. Used if present"
+                ],
+
+                "test-0-action-0": {
+                    "0": { "foo_0": "bar_0" }
+                },
+
+                "test-0-action-1": {
+                    "0": { "foo_1": "bar_1" }
+                },
+
+                "test-0-action-2": {
+                    "0": { "foo_2": "bar_2" }
+                }
+            }
+        }
+    }
+}
+

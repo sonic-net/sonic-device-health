@@ -6,10 +6,10 @@ import sys
 from typing import NamedTuple
 
 GLOBAL_RC_FILE = "/etc/LoM/global.rc.json"
+CT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 test_run = os.getenv("TESTMODE") != None
 if test_run:
-    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test_lib"))
     import test_client
     log_debug("Running in test mode")
 
@@ -45,9 +45,22 @@ def get_vendor_type() -> vendorType:
     return vendorType.UNKNOWN
 
 def get_vendor_import_path():
-    sys.path.append(os.path.join(
+    syspath.append(os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         Vendor_subdir, get_vendor_type().value))
+
+
+# *******************************
+# Syspath updates.
+# *******************************
+#
+def syspath_append(path:str):
+    if path.endswith("/"):
+        path = path[0:-1]
+
+    if path not in sys.path:
+        sys.path.append(path)
+
 
 
 # *******************************
@@ -84,13 +97,14 @@ def read_global_rc() -> bool, {}:
         return True, global_rc_data
 
     if not os.path.exists(GLOBAL_RC_FILE):
+        log_error("Missing global rc file {}".format(GLOBAL_RC_FILE))
         return False, {}
 
     d = {}
     with open(GLOBAL_RC_FILE, "r") as s:
         d = json.load(s)
 
-    for i in [ "config_root_path", "config_static_sub", "config_current_sub",
+    for i in [ "config_running_path", "config_static_path",
             "proc_plugins_conf_name", "actions_config_name", "actions_binding_config_name"]:
         if not d.get(i, None):
             return False, {}
@@ -106,9 +120,9 @@ def get_config_path(static = False) -> str:
         return ""
 
     if static:
-        return os.path.join(v["config_root_path"], v["config_static_sub"])
+        return os.path.join(CT_PATH, v["config-static-path"])
     else:
-        return os.path.join(v["config_root_path"], v["config_current_sub"])
+        return os.path.join(CT_PATH, v["config-running-path"])
 
 
 def get_proc_plugins_conf_file(static = False):
@@ -153,13 +167,8 @@ def _get_data(fl:str) -> {}:
     return ret
 
 
-def get_proc_plugins_conf(lang:str = "", proc_name:str = "") -> {}:
-    d = _get_data(get_proc_plugins_conf_file())
-    if lang:
-        d = d.get(lang, {})
-        if proc_name:
-            d = d.get(proc_name, {})
-    return d
+def get_proc_plugins_conf(proc_name:str = "") -> {}:
+    return _get_data(get_proc_plugins_conf_file()).get(proc_name, {})
 
 
 def get_actions_conf() -> {}:

@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
-import importLib
+import importlib
 import json
 import os
 import sys
@@ -93,6 +93,12 @@ class LoMPluginHolder:
 
     def __init__(self, name:str, plugin_file:str, config: {}):
        
+        if plugin_file.endswith(".py"):
+            module_name = os.path.basename(plugin_file[0:-3])
+        else:
+            module_name = os.path.basename(plugin_file)
+
+
         module_name = ".".join(plugin_file.split(".")[0:-1])
        
         self.plugin = None      # Loaded plugin object
@@ -272,7 +278,17 @@ class LoMPluginHolder:
                 log_error("{}:request has and still timed out".format(self.name))
         return
 
+    
+    def shutdown(self):
+        self.plugin.shutdown()
 
+
+
+def handle_shutdown(active_plugin_holders: {}):
+    for name, holder in active_plugin_holders.items():
+        holder.shutdown()
+        log_info("Requested shutdown of action {}".format(name))
+    return
 
 
 def handle_server_request(active_plugin_holders: {}):
@@ -281,16 +297,18 @@ def handle_server_request(active_plugin_holders: {}):
     if not ret:
         log_error("Failed to read server request upon poll") 
         return
-    if action_name not in active_plugin_holders:
+
+    if action_name == "_SHUTDOWN":
+        handle_shutdown(active_plugin_holders)
+
+    elif action_name in active_plugin_holders:
+        plugin_holder = active_plugin_holders[action_name]
+        if not plugin_holder.is_valid():
+            plugin_holder.request(req)
+        else:
+            log_error("{} is not in valid state to accept request".format(action_name))
+    else:
         log_error("requested action {} is not loaded".format(action_name))
-        return
-
-    plugin_holder = active_plugin_holders[action_name]
-    if not plugin_holder.is_valid():
-        log_error("{} is not in valid state to accept request".format(action_name))
-        return
-
-    plugin_holder.request(req)
     return
 
 
@@ -310,7 +328,7 @@ def main_run(proc_name: str):
         time.sleep(10)
 
 
-    plugins = get_proc_plugins_conf("python", proc_name)
+    plugins = get_proc_plugins_conf(proc_name)
     actions_conf = get_actions_conf()
 
     if not register_client(proc_name):
@@ -348,19 +366,19 @@ def main_run(proc_name: str):
                 log_error("INTERNAL ERROR: fd {} not in pipe list".format(ret))
             else:
                 handle_plugin_holder(pipe_list[ret])
-    # SIGHUP will cause a reload of everything.
+
+    # SIGHUP need a reload of everything.
     deregister_client(proc_name)
+
+    if sigterm_raised:
+        handle_shutdown(active_plugin_holders)
     return
 
 
 
-def main():
-    parser=argparse.ArgumentParser(description="Args for Plugin process for Python plugins")
-    parser.add_argument("-p", "--proc-name", required=True, 
-            help="Name of this process. The config maps the plugins")
-    args = parser.parse_args()
-
-    proc_name = args.proc_name
+def main(proc_name, global_rc):
+    if global_rc:
+        globals()["GLOBAL_RC_FILE"] = args.global_rc
 
     syslog_init(proc_name)
 
@@ -377,6 +395,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser=argparse.ArgumentParser(description="Args for Plugin process for Python plugins")
+    parser.add_argument("-p", "--proc-name", required=True, 
+            help="Name of this process. The config maps the plugins")
+    parser.add_argument("-g", "--global-rc", default="", 
+            help="Path of the global rc file")
+    args = parser.parse_args()
+
+    main(args.proc_name, args.global_rc)
 
 

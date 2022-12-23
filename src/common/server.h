@@ -157,6 +157,7 @@ int ReadClientResponse (clientResponse_t *response);
 
 enum ServerRequestType {
     ACTION_REQUEST = 0,
+    SHUTDOWN
     SERVER_REQ_COUNT
 };
 
@@ -167,9 +168,6 @@ enum ServerRequestType {
 typedef struct ServerRequest {
     /* Type of request. Available request types are in enum */
     ServerRequestType type;
-
-    /* Name of the plugin that raises this request. */
-    const char *plugin_proc_name;
 
     /* Name of the action */
     const char *action;
@@ -207,9 +205,6 @@ typedef struct ServerRequest {
 typedef struct ServerResponse {
     /* Type from corresponding request. */
     ServerRequestType type;
-
-    /* Name of the plugin that raised the request. */
-    const char *plugin_proc_name;
 
     /* Name of the action */
     const char *action;

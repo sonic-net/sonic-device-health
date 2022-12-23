@@ -195,6 +195,7 @@ int write_action_response(action_response *res);
  * Read Action request
  * Json string
  * {
+ *      "request_type": "<action/shutdown/...>"
  *      "action_name": "<Name>",
  *      "instance_id": "<id>",
  *      "context": "<JSON string of context>",
@@ -228,6 +229,7 @@ const char *read_action_request();
  *  res - response being returned.
  * Json string
  * {
+ *      "request_type": "<action/shutdown/...>"
  *      "action_name"   : "<Name>",
  *      "instance_id"   : "<id>",
  *      "action_data"   : "data as spewed by action as result",
