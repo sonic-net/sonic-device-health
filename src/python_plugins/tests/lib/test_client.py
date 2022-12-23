@@ -223,7 +223,15 @@ def get_last_error_str() -> str:
     return error_str
 
 
+def _is_initialized():
+    return getattr(threadLocal, 'cache_svc', None) is not None
+
+
 def register_client(cl_name: bytes) -> int:
+    if _is_initialized():
+        print("ERROR: Duplicate registration {}".format(cl_name))
+        return
+
     l = cl_name.split("_")
     if len(l) <= 1:
         th_local.cache_svc = None
@@ -231,6 +239,9 @@ def register_client(cl_name: bytes) -> int:
         return
 
     th_local.cache_svc = cache_services[l[-1]]
+    th_local.cl_name = cl_name
+    th_local.actions = []
+
     th_local.cache_svc.write_to_server({
         "register_client": {
             "name": cl_name.decode("utf-8") }})
@@ -238,14 +249,31 @@ def register_client(cl_name: bytes) -> int:
 
 
 def deregister_client(cl_name: bytes) -> int:
+    if not _is_initialized():
+        print("deregister_client: ERROR: client not registered {}".format(cl_name))
+        return
+
     th_local.cache_svc.write_to_server({
         "deregister_client": {
             "name": cl_name.decode("utf-8") }})
+    
+    # Clean local cache
+    th_local.cache_svc = None
+    th_local.cl_name = None
+    th_local.actions = None
 
     return
 
 
 def register_action(action_name: bytes) -> int:
+    if not _is_initialized():
+        print("register_action: ERROR: client not registered {}".format(action_name))
+        return
+
+    if action_name in th_local.actions:
+        print("ERROR: Duplicate registration {}".format(actrion_name))
+        return
+
     th_local.cache_svc.write_to_server({
         "register_action": {
             "name": action_name.decode("utf-8") }})
@@ -253,43 +281,100 @@ def register_action(action_name: bytes) -> int:
 
 
 def touch_heartbeat(action_name:bytes, instance_id: bytes):
+    if not _is_initialized():
+        print("touch_heartbeat: ERROR: client not registered {}".format(action_name))
+        return
+
+    if action_name not in th_local.actions:
+        print("ERROR: Heartbeat from unregistered action".format(actrion_name))
+        return
+
     th_local.cache_svc.write_to_server({
         "register_action": {
             "name": action_name.decode("utf-8"),
             "instance_id": instance_id.decode("utf-8") }})
 
  
-def read_action_request() -> bytes:
+def _read_req():
+    if th_local.req:
+        return
+
     ret, d = th_local.cache_svc.read_from_server()
     if not ret:
-        log_error("Failed to read data ret={}".format(ret))
+        req = d["request_type"]
+        act = d["action_name"]
+        if ((req in ["action", "shutdown"]) and
+                (act in th_local.actions)):
+            th_local.req = d
+        else:
+            print("{}: skipped req {} {}".format(th_local.cl_name, req, act))
+    else:
+        print("{}: read failed ret={}".format(th_local.cl_name, ret))
+    return
+
+
+def read_action_request() -> bytes:
+    if not _is_initialized():
+        print("read_action_request: ERROR: client not registered")
+        return
+
+    _read_req()
+    d = th_local.req
+    th_local.req = {}
     return json.dumps(d).encode("utf-8")
 
 
 def write_action_response(resp: bytes) -> int:
+    if not _is_initialized():
+        print("write_action_request: ERROR: client not registered")
+        return
+
     d = json.loads(resp.decode("utf-8"))
     th_local.cache_svc.write_to_server(d)
     return 0
 
 
+def _poll(rdfds:[], timeout: int) -> [int]:
+    while (not shutdown):
+        poll_wait = 2
+
+        if (timeout >= 0):
+            if (timeout < poll_wait):
+                poll_wait = timeout
+            timeout -= poll_wait
+        
+        r, _, _ = select.select(rdfds, [], [], poll_wait)
+        if r:
+            return r
+        if timeout == 0:
+            return -2
+
+
 def poll_for_data(fds, cnt:int, timeout: int) -> int:
-    lst = [ th_local.cache_svc.get_signal_fd(False) ] + list(fds)
-    r, _, _ = select.select(list(fds), [], [], poll_wait)
-    if r:
+    if not _is_initialized():
+        print("poll_for_data: ERROR: client not registered")
+        return
+
+    recv_signal_fd = th_local.cache_svc.get_signal_fd(False)
+    lst = [ recv_signal_fd ] + list(fds)
+
+    while (not shutdown):
+        r = _poll(lst, timeout)
         if r[0] == recv_signal_fd:
-            return -1
+            # Return only if action matches calling client.
+            _read_req()
+            if th_local.req:
+                return -1
+            # Continue to poll
         else:
             return r[0]
-    return -2
-       
+
 
 ## Server side read/write wrappers
 
 def server_read_request(timeout:int = -1) -> bool, {}:
-    while not shutdown:
-        r, _, _ = select.select(list(rd_fds.keys()), [], [], 2)
-        if len(r) > 0:
-            break
+    lst = list(rd_fds.keys())
+    r = _poll(lst, timeout)
 
     ret, d = rd_fds[r[0]].read_from_client()
     if not ret:
