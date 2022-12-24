@@ -190,6 +190,11 @@ int write_action_response(action_response *res);
 
 #endif
 
+// QUESTION
+// will Python/Go can read these defines 
+// or should it be a global const
+//
+#define REQUEST_TYPE = "request_type"
 
 /*
  * Read Action request

@@ -34,7 +34,7 @@
                     },
                     "action_pause": 0
                 },
-                "test-0-action-0": {
+                "test-0-action-2": {
                     "action-name": "test-0-action-0",
                     "heartbeat_interval": 2,
                     "action_resp": {
@@ -77,6 +77,40 @@
 
                 "test-0-action-2": {
                     "0": { "foo_2": "bar_2" }
+                }
+            },
+            "test-main-run": {
+                "_description": [
+                    "Test main raises request per data here",
+                    "Series of requests per anomaly",
+                    "Each time a mitigation run is complete for an anomaly",
+                    "the next request in chain is invoked"
+                ]
+                "input": {
+                    "_description" : [
+                        "Input is per anomaly and updatable param for following actions",
+                        "Only tweaks are provided - Hence optiona"
+                    ]
+                    "test-0-action-0": {
+                        "timeout": 10,
+                        "instances": [
+                            {
+                                "instance_id": "instance_id_0",
+                                "timeout": 10,
+                                "test-0-action-1": {
+                                    "timeout": 5
+                                },
+                                "test-0-action-2": {
+                                    "timeout": 6
+                                }
+                            }
+                        }
+                    }
+                },
+                "output": {
+                    "_description": [
+                        "Output for comparison"
+                    ]
                 }
             }
         }

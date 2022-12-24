@@ -5,6 +5,8 @@ import os
 import time
 import threading
 
+from common import *
+
 # This module helps mock c-bindings calls to server.
 # This enable a test code to act as server/engine
 #
@@ -36,22 +38,21 @@ th_local = threading.local(()
 
 CACHE_LIMIT = 10
 
-class CLIENT_REQ_TYPE(Enum):
-REGISTER_PROC = 0
-REGISTER_PLUGIN = 1
-DEREGISTER_PROC = 2
-HEARTBEAT = 3
-ACTION_RESP = 4
-CLIENT_REQ_CNT = 5
-
-
-class SERVER_REQ_TYPE(Enum):
-ACTION_REQ = 0
-SHUTDOWN = 1
-SERVER_REQ_CNT = 2
-
-
 shutdown = False
+
+# requests
+# These are between clib client & server, hence mocked here.
+REGISTER_CLIENT = "register_client"
+DEREGISTER_CLIENT = "deregister_client"
+REGISTER_ACTION = "register_action"
+HEARTBEAT = "heartbeat"
+ACTION_REQUEST = "action_request"
+ACTION_RESPONSE = "action_response"
+SHUTDOWN = "shutdown"
+
+ATTR_CLIENT_NAME = "client_name"
+ATTR_REQUEST_TYPE = "request_type"
+
 
 # Caches data in one direction with indices for nxt, cnt to relaize Q full
 # state and data buffer.
@@ -243,9 +244,9 @@ def register_client(cl_name: bytes) -> int:
     th_local.actions = []
 
     th_local.cache_svc.write_to_server({
-        "register_client": {
-            "name": cl_name.decode("utf-8") }})
-    return
+        REGISTER_CLIENT: {
+            ATTR_CLIENT_NAME: cl_name.decode("utf-8") }})
+        return
 
 
 def deregister_client(cl_name: bytes) -> int:
@@ -254,8 +255,8 @@ def deregister_client(cl_name: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        "deregister_client": {
-            "name": cl_name.decode("utf-8") }})
+        DEREGISTER_CLIENT: {
+            ATTR_CLIENT_NAME: cl_name.decode("utf-8") }})
     
     # Clean local cache
     th_local.cache_svc = None
@@ -275,8 +276,9 @@ def register_action(action_name: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        "register_action": {
-            "name": action_name.decode("utf-8") }})
+        REGISTER_ACTION: {
+            ATTR_ACTION_NAME: action_name.decode("utf-8"),
+            ATTR_CLIENT_NAME: th_local.cl_name }})
     return
 
 
@@ -290,9 +292,10 @@ def touch_heartbeat(action_name:bytes, instance_id: bytes):
         return
 
     th_local.cache_svc.write_to_server({
-        "register_action": {
-            "name": action_name.decode("utf-8"),
-            "instance_id": instance_id.decode("utf-8") }})
+        HEARTBEAT: {
+            ATTR_CLIENT_NAME: th_local.cl_name,
+            ATTR_ACTION_NAME: action_name.decode("utf-8"),
+            ATTR_INSTANCE_ID: instance_id.decode("utf-8") }})
 
  
 def _read_req():
@@ -301,10 +304,10 @@ def _read_req():
 
     ret, d = th_local.cache_svc.read_from_server()
     if not ret:
-        req = d["request_type"]
-        act = d["action_name"]
-        if ((req in ["action", "shutdown"]) and
-                (act in th_local.actions)):
+        req = d[ATTR_REQUEST_TYPE]
+        act = d.get(ATTR_ACTION_NAME)
+        if (((req == ACTION_REQUEST) and (act in th_local.actions)) or
+                (req == SHUTDOWN)):
             th_local.req = d
         else:
             print("{}: skipped req {} {}".format(th_local.cl_name, req, act))
@@ -378,19 +381,32 @@ def server_read_request(timeout:int = -1) -> bool, {}:
 
     ret, d = rd_fds[r[0]].read_from_client()
     if not ret:
-        return "", {}
+        return False, {}
     if len(d) != 1:
         print("Internal error. Expected one key. ({})".format(json.dumps(d)))
-        return "", {}
-    return d[list(d.keys())[0]]
+        return False, {}
+    return True, d
 
 
 
-def server_write_request(data:{})->int:
+def server_write_request(data:{}):
     # Write is broadcast to all instances
     # The instances filter out requests for their actions
     #
     for _, svc in wr_fds:
-        return svc.write_to_client(data)
+        svc.write_to_client(data)
+    return
 
+
+def parse_reg_client(data: {}) -> str :
+    return data[ATTR_CLIENT_NAME]
+
+
+def parse_reg_action(data: {}) -> str, str :
+    return data[ATTR_CLIENT_NAME], data[ATTR_ACTION_NAME]
+
+
+def parse_heartbeat(data: {}) -> str, str, str :
+    return (data[ATTR_CLIENT_NAME], 
+            data[ATTR_ACTION_NAME], data[ATTR_INSTANCE_ID])
 
