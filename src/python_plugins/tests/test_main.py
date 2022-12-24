@@ -4,15 +4,15 @@ import os
 import sys
 import test_client
 
-CT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-sys.path.append(CT_DIR, "..", "src")
+sys.path.append(_CT_DIR, "..", "src")
 
 from common import *
 
-TMP_DIR = os.path.join(CT_DIR, "tmp")
+TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
-TEST_DATA = os.path.join(CT_DIR, "test_data", "test_data.json")
+TEST_DATA = os.path.join(_CT_DIR, "test_data", "test_data.json")
 
 
 lst_procs = {}
@@ -138,10 +138,10 @@ def run_a_testcase(test_case:str, test_data:{}):
             globals()[k] = v
 
     # Set paths for import
-    syspath_append(CT_DIR)
-    syspath_append(os.path.join(CT_DIR, "lib"))
-    syspath_append(os.path.join(CT_DIR, "plugins"))
-    syspath_append(os.path.join(CT_DIR, "..", "src"))
+    syspath_append(_CT_DIR)
+    syspath_append(os.path.join(_CT_DIR, "lib"))
+    syspath_append(os.path.join(_CT_DIR, "plugins"))
+    syspath_append(os.path.join(_CT_DIR, "..", "src"))
 
     load_procs(test_data["procs_config"].keys(), global_rc_file)
 

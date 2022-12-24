@@ -5,45 +5,11 @@ import os
 import sys
 from typing import NamedTuple
 
+# python_proc overrides this path via args, if provided.
 GLOBAL_RC_FILE = "/etc/LoM/global.rc.json"
-CT_PATH = os.path.dirname(os.path.abspath(__file__))
+_CT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 from enum import Enum
-
-Vendor_subdir = "vendors"
-
-class ActionType(Enum):
-    ANOMALY = 0
-    MITIGATION = 1
-    SAFETYT_CHECK = 2
-
-
-class ActionTypeStr(Enum):
-    ANOMALY = "Anomaly"
-    MITIGATION = "mitigation"
-    SAFETYT_CHECK = "Safety-Check"
-
-# *******************************
-# Vendor related info
-# *******************************
-#
-class vendorType(Enum):
-    SONIC = "SONiC",
-    CISCO = "Cisco",
-    ARISTA = "Arista"
-    UNKNOWN = "Unknown"
-
-
-def get_vendor_type() -> vendorType:
-    if os.path.exists("/etc/sonic"):
-        return vendorType.SONIC
-    return vendorType.UNKNOWN
-
-def get_vendor_import_path():
-    syspath.append(os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        Vendor_subdir, get_vendor_type().value))
-
 
 # *******************************
 # Syspath updates.
@@ -85,39 +51,44 @@ def log_warning(msg:str):
 # config related info
 # *******************************
 #
-global_rc_data = {}
+_global_rc_data = {}
 
-def read_global_rc() -> bool, {}:
-    if global_rc_data:
-        return True, global_rc_data
+def get_global_rc() -> {}:
+    if _global_rc_data:
+        return global_rc_data
 
     if not os.path.exists(GLOBAL_RC_FILE):
         log_error("Missing global rc file {}".format(GLOBAL_RC_FILE))
-        return False, {}
+        return {}
 
     d = {}
     with open(GLOBAL_RC_FILE, "r") as s:
         d = json.load(s)
 
-    for i in [ "config_running_path", "config_static_path",
-            "proc_plugins_conf_name", "actions_config_name", "actions_binding_config_name"]:
-        if not d.get(i, None):
-            return False, {}
+    # required attributes
+    reqd = { "config_running_path", "config_static_path", "proc_plugins_conf_name",
+            "actions_config_name", "actions_binding_config_name"}
+
+    if not reqd.issubset(set(d)):
+        for i in reqd:
+            if i not in d:
+                print("Missing required attr {}".format(i))
+        return {}
 
 
-    global_rc_data = {value:key for key, value in d.items()}
-    return True, global_rc_data
+    _global_rc_data = {key:value for key, value in d.items() if not key.startswith("_")}
+    return global_rc_data
 
 
 def get_config_path(static = False) -> str:
-    v, d = read_global_rc()
-    if not v:
+    d = get_global_rc()
+    if not d:
         return ""
 
     if static:
-        return os.path.join(CT_PATH, v["config-static-path"])
+        return os.path.join(_CT_PATH, v["config-static-path"])
     else:
-        return os.path.join(CT_PATH, v["config-running-path"])
+        return os.path.join(_CT_PATH, v["config-running-path"])
 
 
 def get_proc_plugins_conf_file(static = False):
@@ -125,7 +96,11 @@ def get_proc_plugins_conf_file(static = False):
     cfg_path = get_config_path(static)
     if not cfg_path:
         return ""
-    return os.path.join(cfg_path, global_rc_data["proc_plugins_conf_name"])
+    fl = os.path.join(cfg_path, get_global_rc()["proc_plugins_conf_name"])
+    if not os.path.exists(fl):
+        return ""
+    return fl
+
 
 
 def get_actions_conf_file(static = False):
@@ -133,7 +108,10 @@ def get_actions_conf_file(static = False):
     cfg_path = get_config_path(static)
     if not cfg_path:
         return ""
-    return os.path.join(cfg_path, global_rc_data["actions_config_name"])
+    fl = os.path.join(cfg_path, get_global_rc()["actions_config_name"])
+    if not os.path.exists(fl):
+        return ""
+    return fl
 
 
 def get_actions_binding_conf_file(static = False):
@@ -141,7 +119,10 @@ def get_actions_binding_conf_file(static = False):
     cfg_path = get_config_path(static)
     if not cfg_path:
         return ""
-    return os.path.join(cfg_path, global_rc_data["actions_binding_config_name"])
+    fl = os.path.join(cfg_path, get_global_rc()["actions_binding_config_name"])
+    if not os.path.exists(fl):
+        return ""
+    return fl
 
 
 def is_running_config_available() -> bool:
