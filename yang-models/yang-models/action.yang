@@ -14,11 +14,10 @@ module actions {
         "SONiC";
 
     description
-        "actions common definition";
+        "actions definition";
 
     revision 2022-12-01 {
-        description
-            "Common reusable definitions";
+        description "An action definition applicable to all action types";
     } 
 
     typedef action-types {
