@@ -59,14 +59,14 @@ int get_last_error();
 const char *get_error_str();
 
 /*
- * Register the plugin process
+ * Register the process
  *
  * A process could register multiple actions.
  * A process restart is guaranteed to use the same ID,
  * which can help engine clean old registrations and start new.
  *
  * Input:
- *  plugin_proc_id -- Name of the plugin process ID
+ *  proc_id -- Name of the process Identifier
  *      A process reuses this ID upon restart.
  *      Engine identifies actions against this ID
  *      to block any duplicate registrations from
@@ -79,10 +79,10 @@ const char *get_error_str();
  *  0 for success
  *  !=0 implies error
  */
-int register_client(const char *plugin_proc_id);
+int register_client(const char *proc_id);
 
 /*
- * Register the plugins 
+ * Register the actions 
  *
  * Expect this process ID is pre-registered.
  *
@@ -96,14 +96,14 @@ int register_client(const char *plugin_proc_id);
  *  0 for success
  *  !=0 implies error
  */
-int register_plugin(const char *action);
+int register_action(const char *action);
 
 
 /*
- * Deregister the plugin
+ * Deregister the action
  *
  * Input:
- *  plugin_proc_id - Id used during registration.
+ *  proc_id - Id used during registration.
  *
  * Output:
  *  None
@@ -112,16 +112,16 @@ int register_plugin(const char *action);
  *  None.
  *
  */
-void deregister_client(const char *plugin_proc_id);
+void deregister_client(const char *proc_id);
 
 
 /*
  * Heartbeat touch
  *
- * Calls heartbeat touch upon hesartbeat touch from a plugin
+ * Calls heartbeat touch upon heartbeat touch from an running action.
  *
  * Input:
- *  action_name - Name of the action of this plugin making the callback.
+ *  action_name - Name of the action 
  *
  *  instance-id - ID given in corresponding request.
  *
