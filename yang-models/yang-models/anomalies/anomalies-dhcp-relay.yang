@@ -14,8 +14,11 @@ module anomalies-dhcp-relay {
     contact
         "SONiC";
 
-    description
-        "SONIC dhcp-relay anomalies";
+    description "
+        SONIC dhcp-relay anomalies
+        NOTE: Each defines anomaly *specific* data only.
+              The main action schema refers to it as union
+              element for the attribute 'action-data'";
 
     revision 2022-12-01 {
         description "dhcp-relay alert anomalies.";
@@ -34,6 +37,7 @@ module anomalies-dhcp-relay {
         
     container anomalies-dhcp-relay {
         container dhcp-relay-discard {
+
             evtcmn:ALARM_SEVERITY_MAJOR;
 
             description "
@@ -55,8 +59,6 @@ module anomalies-dhcp-relay {
             }
 
             uses dhcp-service-info;
-            uses actcmn:actions-cmn;
-            uses actcmn:actions-anomaly-cmn;
         }
 
         container dhcp-relay-disparity {
@@ -90,8 +92,6 @@ module anomalies-dhcp-relay {
 
             uses dhcp-service-info;
 
-            uses actcmn:actions-cmn;
-            uses actcmn:actions-anomaly-cmn;
         }
 
         container dhcp-relay-bind-failure {
@@ -119,9 +119,6 @@ module anomalies-dhcp-relay {
             }
 
             uses dhcp-service-info;
-
-            uses actcmn:actions-cmn;
-            uses actcmn:actions-anomaly-cmn;
         }
     }
 }

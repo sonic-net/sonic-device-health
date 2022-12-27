@@ -18,8 +18,11 @@ module mitigations-service-restart {
     contact
         "SONiC";
 
-    description
-        "SONIC service-restart mitigations";
+    description "
+        SONIC service-restart mitigations
+        NOTE: Each defines this action  *specific* data only.
+              The main action schema refers to it as union
+              element for the attribute 'action-data'";
 
     revision 2022-12-01 {
         description "service-restart alert mitigations.";
@@ -45,9 +48,6 @@ module mitigations-service-restart {
 
                 description "Name of the i/f discarding";
             } 
-
-            uses actcmn:actions-cmn;
-            uses actcmn:action-result-cmn;
         }
     }
 }
