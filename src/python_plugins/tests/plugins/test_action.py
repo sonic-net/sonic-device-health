@@ -15,13 +15,16 @@ import common
 # Test Anomaly
 #
 
-action_req_ctx = "REQ_CONTEXT"
-action_resp_data = "ACTION_RESP"
-action_pause = "ACTION_PAUSE"
+# The behavior is controlled by global variables loaded by test main
+# The following are used to construct name as <action name>_<one of var
+# names below>
+ACTION_REQ_CTX = "REQ_CONTEXT"      # matched with incoming context
+ACTION_RESP_DATA = "ACTION_RESP"    # Response sent out for request
+ACTION_PAUSE = "ACTION_PAUSE"       # Pause time before sending response
 
-def get_global(action_name, attr_name):
+def get_global(action_name, attr_name, default=None):
     s = "{}_{}".format(action_name, attr_name)
-    return globals().get(s, None)
+    return globals().get(s, default)
 
 
 class LoMPlugin:
@@ -39,13 +42,13 @@ class LoMPlugin:
 
 
     def is_valid(self) -> bool:
-        return self.is_valid
+        return self.is_valid and not self.shutdown
 
 
 
     def request(req: ActionRequest) -> ActionResponse:
         ret = ActionResponse (self.action_name, req.instance_id,
-                get_global(self.action_name, action_resp_data), 0, "")
+                get_global(self.action_name, ACTION_RESP_DATA, {"test" : "ok"}), 0, "")
 
         if not self.is_valid:
             log_error("{}: Plugin is not valid. Failing request".format(action_name))
@@ -57,7 +60,7 @@ class LoMPlugin:
             ret.result_code = 2
             ret.result_str "Mismatch in action name"
             
-        elif req.context != get_global(self.action_name, action_req_ctx):
+        elif req.context != get_global(self.action_name, ACTION_REQ_CTX, req.context):
             log_error("{}: Mismatch in action name".format(self.action_name))
             ret.result_code = 2
             ret.result_str "Mismatch in action name"
@@ -68,8 +71,8 @@ class LoMPlugin:
             ret.result_str "Misssing instance id"
             
         else:
-            pause = int(get_global(self.action_name, action_pause))
-            hb_int = self.action_config.get("heartbeat_interval", 0)
+            pause = int(get_global(self.action_name, ACTION_PAUSE, 3))
+            hb_int = self.action_config.get("heartbeat_interval", 1)
             inst_id = self.req.instance_id
 
             n = 0;
@@ -89,3 +92,4 @@ class LoMPlugin:
         # so it could abort.
         #
         self.shutdown = True
+
