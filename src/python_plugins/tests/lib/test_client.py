@@ -15,9 +15,14 @@ from common import *
 #   When there are multiple procs multiple threads will be created as one per proc.
 #   Each thread gets its own cache service instance using the trailing number in 
 #   its name as index into list of pre-created cache service instances.
+#   The cache service mimics the R/W channels between main thread & proc.
 #
 #   Each cache-service instance has two caches as one for each direction
 #   Each cache instance has a pipe with two fds as one for read & write.
+#
+#   Main thread owns caches from all services for server to client.
+#   Proc thread owns cache for client to server.
+#
 #   Main thread collects write fds from all cache instances for server to client
 #   and collects rd fs from all client to server cache instances
 #   These fds are used for signalling between main thread and the thread that owns
@@ -25,15 +30,22 @@ from common import *
 #   Cache supports rd/wr index and read / write methods.
 #
 #   Any write, the main thread writes into all server to client instances.
+#   The client threads takes only requests meant for its actions
+#
 #   It listens on signals from all collected rd fds and read from signalling
 #   cache instances.
 #
-#   The test code acts as engine in main thread.
+#   This test code acts ass or mimics engine in the main thread.
+#   In non-test scenario, the supervisord from container manages the processes
+#   for each proc.
 #
 # All requests/responses across are saved in a list capped by size.
 # Each side adding to list, signals the other via a pipe.
 #
 
+# Create this just once and use
+# Each thread transparently gets its own copy
+#
 th_local = threading.local(()
 
 CACHE_LIMIT = 10
@@ -51,8 +63,7 @@ ACTION_RESPONSE = "action_response"
 SHUTDOWN = "shutdown"
 
 ATTR_CLIENT_NAME = "client_name"
-ATTR_REQUEST_TYPE = "request_type"
-
+ATTR_ACTION_NAME = "action_name"
 
 # Caches data in one direction with indices for nxt, cnt to relaize Q full
 # state and data buffer.
@@ -65,25 +76,25 @@ class CacheData:
         self.rd_cnt = 0
         self.wr_cnt = 0
         self.data: { int: {} } = {}
-        self.c2s = c2s
+        self.c2s = c2s      # True for client to server direction
         self.signal_rd, self.signal_wr = os.pipe()
 
 
-        def get_signal_fd() -> int:
-            return self.signal_rd
+    def get_signal_rd_fd() -> int:
+        return self.signal_rd
 
 
-        def get_write_fd() -> int:
-            return self.signal_wr
+    def get_signal_wr_fd() -> int:
+        return self.signal_wr
 
 
-        def _drain_signal():
-            while True:
-                r, _, _ = select.select([self.signal_rd], [], [], 0)
-                if self.signal_rd in r:
-                    rd = os.read(self.signal_rd, 100)
-                else:
-                    break
+    def _drain_signal():
+        while True:
+            r, _, _ = select.select([self.signal_rd], [], [], 0)
+            if self.signal_rd in r:
+                rd = os.read(self.signal_rd, 100)
+            else:
+                break
 
 
     def _raise_signal():
@@ -93,7 +104,7 @@ class CacheData:
     def write(self, data: {}) -> bool:
         # Test code never going to rollover. So ignore cnt rollover possibility.
         #
-        if (self.wr_cnt - self.rd_cnt) > self.limit:
+        if (self.wr_cnt - self.rd_cnt) < self.limit:
             self.data[self.wr_index] = data
             self.wr_index += 1
             if self.wr_index >= self.limit:
@@ -144,8 +155,8 @@ class CacheData:
 
 class cache_service:
     def __init__(self, limit:int=CACHE_LIMIT):
+        # Get cache for both directions
         self.c2s = CacheData()
-            os.write(self.signal_wr, b"data")
         self.s2c = CacheData()
 
 
@@ -154,8 +165,6 @@ class cache_service:
 
     def write_to_client(self, d: {}) -> bool:
         return self.s2c.write(d)
-    log_error("Write overflow  s2c limit={}".format(self.limit))
-            return False
 
     def read_from_server(self, timeout:int = -1) -> bool, {}:
         return self.s2c.read(timeout)
@@ -163,18 +172,18 @@ class cache_service:
     def read_from_client(self, timeout:int = -1) -> bool, {}:
         return self.c2s.read(timeout)
 
-    def get_signal_fd(is_c2s:bool) -> int:
+    def get_signal_rd_fd(is_c2s:bool) -> int:
         if is_c2s:
-            return self.c2s.get_signal_fd()
+            return self.c2s.get_signal_rd_fd()
         else:
-            return self.s2c.get_signal_fd()
+            return self.s2c.get_signal_rd_fd()
 
 
-    def get_write_fd(is_c2s:bool) -> int:
+    def get_signal_wr_fd(is_c2s:bool) -> int:
         if is_c2s:
-            return self.c2s.get_write_fd()
+            return self.c2s.get_signal_wr_fd()
         else:
-            return self.s2c.get_write_fd()
+            return self.s2c.get_signal_wr_fd()
 
 
 cache_services = None
@@ -197,8 +206,8 @@ def create_cache_services(cnt:int):
     cache_services = cache_service[cnt]
     for i in range(cnt):
         p = cache_services[i]
-        rd_fds[p.get_signal_fd(true)] = p
-        wr_fds[p.get_write_fd(false)] = p
+        rd_fds[p.get_signal_rd_fd(true)] = p
+        wr_fds[p.get_signal_wr_fd(false)] = p
 
 
 test_error_code = 0
@@ -216,19 +225,19 @@ def reset_error():en(r) > 0:
     error_code = 0
     error_str = ""
 
-def get_last_error() -> int:
+def clib_get_last_error() -> int:
     return error_code
 
 
-def get_last_error_str() -> str:
+def clib_get_last_error_str() -> str:
     return error_str
 
 
 def _is_initialized():
-    return getattr(threadLocal, 'cache_svc', None) is not None
+    return getattr(th_local, 'cache_svc', None) is not None
 
 
-def register_client(cl_name: bytes) -> int:
+def clib_register_client(cl_name: bytes) -> int:
     if _is_initialized():
         print("ERROR: Duplicate registration {}".format(cl_name))
         return
@@ -239,7 +248,10 @@ def register_client(cl_name: bytes) -> int:
         print("Proc name must trail with _<n>")
         return
 
-    th_local.cache_svc = cache_services[l[-1]]
+    index = l[-1]
+    print("Registered:{} taken service index {}".
+            format(cl_name, index))
+    th_local.cache_svc = cache_services[index]
     th_local.cl_name = cl_name
     th_local.actions = []
 
@@ -249,7 +261,7 @@ def register_client(cl_name: bytes) -> int:
         return
 
 
-def deregister_client(cl_name: bytes) -> int:
+def clib_deregister_client(cl_name: bytes) -> int:
     if not _is_initialized():
         print("deregister_client: ERROR: client not registered {}".format(cl_name))
         return
@@ -266,7 +278,7 @@ def deregister_client(cl_name: bytes) -> int:
     return
 
 
-def register_action(action_name: bytes) -> int:
+def clib_register_action(action_name: bytes) -> int:
     if not _is_initialized():
         print("register_action: ERROR: client not registered {}".format(action_name))
         return
@@ -275,6 +287,7 @@ def register_action(action_name: bytes) -> int:
         print("ERROR: Duplicate registration {}".format(actrion_name))
         return
 
+    th_local.actions.append(action_name)
     th_local.cache_svc.write_to_server({
         REGISTER_ACTION: {
             ATTR_ACTION_NAME: action_name.decode("utf-8"),
@@ -282,7 +295,7 @@ def register_action(action_name: bytes) -> int:
     return
 
 
-def touch_heartbeat(action_name:bytes, instance_id: bytes):
+def clib_touch_heartbeat(action_name:bytes, instance_id: bytes):
     if not _is_initialized():
         print("touch_heartbeat: ERROR: client not registered {}".format(action_name))
         return
@@ -298,42 +311,47 @@ def touch_heartbeat(action_name:bytes, instance_id: bytes):
             ATTR_INSTANCE_ID: instance_id.decode("utf-8") }})
 
  
-def _read_req():
+def _read_req() -> bool:
     if th_local.req:
-        return
+        return True
 
-    ret, d = th_local.cache_svc.read_from_server()
-    if not ret:
-        req = d[ATTR_REQUEST_TYPE]
-        act = d.get(ATTR_ACTION_NAME)
-        if (((req == ACTION_REQUEST) and (act in th_local.actions)) or
-                (req == SHUTDOWN)):
-            th_local.req = d
-        else:
-            print("{}: skipped req {} {}".format(th_local.cl_name, req, act))
+    req_bytes = None
+    while not ret:
+        ret, req_bytes = th_local.cache_svc.read_from_server()
+
+    d = json.loads(req_bytes.decode("utf-8"))
+
+
+    if ((d["request_type"] == "shutdown") or
+            (d["action_name"] in th_local.actions)):
+        th_local.req = req_bytes
+        return True
     else:
-        print("{}: read failed ret={}".format(th_local.cl_name, ret))
-    return
+        return False
 
+       
 
-def read_action_request() -> bytes:
+def clib_read_action_request() -> bytes:
     if not _is_initialized():
         print("read_action_request: ERROR: client not registered")
         return
 
-    _read_req()
-    d = th_local.req
-    th_local.req = {}
-    return json.dumps(d).encode("utf-8")
+    # read and also check if 
+    ret = False
+    while not ret:
+        ret = _read_req()
+
+    req = th_local.req
+    th_local.req = None
+    return req
 
 
-def write_action_response(resp: bytes) -> int:
+def clib_write_action_response(resp: bytes) -> int:
     if not _is_initialized():
         print("write_action_request: ERROR: client not registered")
         return
 
-    d = json.loads(resp.decode("utf-8"))
-    th_local.cache_svc.write_to_server(d)
+    th_local.cache_svc.write_to_server(resp)
     return 0
 
 
@@ -353,12 +371,14 @@ def _poll(rdfds:[], timeout: int) -> [int]:
             return -2
 
 
-def poll_for_data(fds, cnt:int, timeout: int) -> int:
+# Called by client - here the Plugin Process
+#
+def clib_poll_for_data(fds, cnt:int, timeout: int) -> int:
     if not _is_initialized():
         print("poll_for_data: ERROR: client not registered")
         return
 
-    recv_signal_fd = th_local.cache_svc.get_signal_fd(False)
+    recv_signal_fd = th_local.cache_svc.get_signal_rd_fd(False)
     lst = [ recv_signal_fd ] + list(fds)
 
     while (not shutdown):
@@ -374,6 +394,9 @@ def poll_for_data(fds, cnt:int, timeout: int) -> int:
 
 
 ## Server side read/write wrappers
+# NOTE: These are not clib wrappers but match implementation
+# of clib wrappers as server writes are read by clib mock and 
+# vice versa
 
 def server_read_request(timeout:int = -1) -> bool, {}:
     lst = list(rd_fds.keys())
