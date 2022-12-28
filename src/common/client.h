@@ -134,67 +134,6 @@ void deregister_client(const char *proc_id);
 void touch_heartbeat(const char *action, const char *instance_id);
 
 
-#if 0
-
-    DROP START
-
-struct action_request {
-    /* Name of the action being requested */
-    const char *action_name;
-
-    /*
-     * Instance ID assigned for this call,
-     * Log messages may include this ID to identify it with
-     * runtime instance ID.
-     */
-    const char *instance_id;
-
-    /*
-     * JSON string of all data spewed from preceding actions
-     *
-     * {
-     *      <sequence>: <JSON string of returned action-data>[, ...]
-     * }
-     */
-    const char *context;
-};
-
-struct action_response {
-    const char *action_name;
-
-    /*
-     * Instance ID assigned for the corresponding request.
-     */
-    const char *instance_id;
-
-    /*
-     * JSON string of action data spewed by this action.
-     */
-    const char *action_data;
-
-    /*
-     * Result code of the action completion.
-     */
-    int result_code;
-
-    /*
-     * Result string of the action completion.
-     */
-    int result_str;
-};
-
-int read_action_request(action_request *req);
-int write_action_response(action_response *res);
-
-    DROP END
-
-#endif
-
-// QUESTION
-// will Python/Go can read these defines 
-// or should it be a global const
-//
-#define REQUEST_TYPE = "request_type"
 
 /*
  * Read Action request
@@ -224,6 +163,24 @@ int write_action_response(action_response *res);
  *      0 for sucess or timeout
  *      !=0 implies failure
  */
+
+/*
+ * request & resp obj element names
+ */
+const char *REQ_TYPE "request_type"
+const char *REQ_TYPE_ACTION "action"
+const char *REQ_TYPE_SHUTDOWN "shutdown"
+
+const char *REQ_ACTION_NAME "action_name"
+const char *REQ_INSTANCE_ID "instance_id"
+const char *REQ_CONTEXT "context"
+const char *REQ_TIMEOUT "timeout"
+
+const char *REQ_ACTION_DATA "action_data"
+const char *REQ_RESULT_CODE "result_code"
+const char *REQ_RESULT_STR "result_str"
+
+
 const char *read_action_request();
 
 
@@ -239,7 +196,6 @@ const char *read_action_request();
  *      "instance_id"   : "<id>",
  *      "action_data"   : "data as spewed by action as result",
  *      "result_code"   : <Result code of peocessing the request>
- *      "result_code"   : <Result code of peocessing the request>
  *      "result_str"    : <Human readabloe string of result code >
  *  }
  *  "action_data" -- JSON string as per action schema devoid of common
@@ -252,6 +208,7 @@ const char *read_action_request();
  *  0 for sucess
  *  !=0 implies failure
  */
+
 int write_action_response(const char *res);
 
 

@@ -138,15 +138,34 @@ def touch_heartbeat(action: str, instance_id: str) -> bool:
     return True
 
 
+# CLIB globals
+def _get_str_globals(name:str) -> str:
+    return (c_char_p.in_dll(_clib_dll, name)).value.decode("utf-8")
+
+
+REQ_TYPE = _get_str_globals("REQ_TYPE")
+REQ_TYPE_ACTION = _get_str_globals("REQ_TYPE_ACTION")
+REQ_TYPE_SHUTDOWN = _get_str_globals("REQ_TYPE_SHUTDOWN")
+
+REQ_ACTION_NAME = _get_str_globals("REQ_ACTION_NAME")
+REQ_INSTANCE_ID = _get_str_globals("REQ_INSTANCE_ID")
+REQ_CONTEXT = _get_str_globals("REQ_CONTEXT")
+REQ_TIMEOUT = _get_str_globals("REQ_TIMEOUT")
+REQ_ACTION_DATA = _get_str_globals("REQ_ACTION_DATA")
+REQ_RESULT_CODE = _get_str_globals("REQ_RESULT_CODE")
+REQ_RESULT_STR  = _get_str_globals("REQ_RESULT_STR")
+
 class ActionRequest:
-    def __init__(action_name:str="",
-            instance_id:str,
-            context: str,
-            timeout:int) :
-        self.action_name = action_name
-        self.instance_id = instance_id
-        self.context = context
-        self.timeout = timeout
+    def __init__(sdata: str):
+        data = json.loads(sdata)
+        self.type = data[REQ_TYPE]
+        self.action_name = data[REQ_ACTION_NAME]
+        self.instance_id = data[REQ_INSTANCE_ID]
+        self.context = data[REQ_CONTEXT]
+        self.timeout = data[REQ_TIMEOUT]
+
+    def is_shutdown(self) -> bool:
+        return self.type == REQ_TYPE_SHUTDOWN
 
 
 def read_action_request() -> bool, ActionRequest:
@@ -161,12 +180,7 @@ def read_action_request() -> bool, ActionRequest:
             print_clib_error("read_action_request failed", 0)
         return False, None
 
-    d = json.loads(req)
-    return True, ActionRequest(
-            d.get(ATTR_ACTION_NAME, "")
-            d.get(ATTR_INSTANCE_ID, "")
-            d.get(ATTR_CONTEXT, "")
-            d.get(ATTR_TIMEOUT, 0))
+    return True, ActionRequest(req)
 
 
 
@@ -176,11 +190,16 @@ class ActionResponse:
             action_data: str,
             result_code:int,
             result_str:st) :
-        self.action_name = action_name
-        self.instance_id = instance_id
-        self.action_data = action_data
-        self.result_code = result_code
-        self.result_str = result_str
+        self.data = json.dumps({
+                REQ_ACTION_NAME: action_name,
+                REQ_INSTANCE_ID: instance_id,
+                REQ_ACTION_DATA: action_data,
+                REQ_RESULT_CODE: result_code,
+                REQ_RESULT_STR : result_str })
+
+                
+    def value(self): -> str:
+        return self.data 
 
 
 def write_action_response(res: ActionResponse) -> bool
@@ -188,13 +207,7 @@ def write_action_response(res: ActionResponse) -> bool
         return False
 
     ret = _clib_write_action_response(
-            json.dumps({
-                ATTR_ACTION_NAME: res.action_name,
-                ATTR_INSTANCE_ID: res.instance_id,
-                ATTR_ACTION_DATA: res.action_data,
-                ATTR_RESULT_CODE: res.result_code,
-                ATTR_RESULT_STR: res.result_str
-            }).encode("utf-8"))
+            ActionResponse.value().encode("utf-8"))
 
     if ret != 0:
         print_clib_error("write_action_response failed", ret)

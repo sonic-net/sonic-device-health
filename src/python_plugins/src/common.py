@@ -49,6 +49,18 @@ def log_warning(msg:str):
 
 # *******************************
 # config related info
+#
+# Global RC file default path is hardcoded.
+# Path can be overridden via OS globals
+#
+# The RC file provides path that has running config
+# running config for procs vs plugins, actions-config
+# and binding config
+#
+# An external tool expected to generate based on static
+# config files + tweaks from CONFIG-DB.
+#
+# First cut: running_path == static_path is True
 # *******************************
 #
 _global_rc_data = {}
@@ -156,14 +168,4 @@ def get_actions_binding_conf(action_name:str) -> {}:
     if action_name:
         d = d.get(action_name, {})
     return d
-
-
-# Action request attrs
-ATTR_ACTION_NAME = "action_name"
-ATTR_INSTANCE_ID = "instance_id"
-ATTR_CONTEXT = "context"
-ATTR_TIMEOUT = "timeout"
-ATTR_ACTION_DATA = "action_data"
-ATTR_RESULT_CODE = "result_code"
-ATTR_RESULT_STR = "result_str"
 
