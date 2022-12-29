@@ -11,7 +11,12 @@
     }
     "test_cases": {
         "test-0": {
-            "_description": "Key 'test-0' is test case name.",
+            "_description": [
+                "Key 'test-0' is test case name.",
+                "plugin paths provide paths to plugins, if different",
+                "from plugins dir under tests"
+            ],
+            "plugin_paths": [],
             "actions-config": {
                 "_description": [
                    "Action names should start with alpha [a-z]"
@@ -19,7 +24,7 @@
                 "test-0-action-0": {
                     "action-name": "test-0-action-0",
                     "heartbeat_interval": 2,
-                    "action_resp": {
+                    "action_data": {
                         "foo": "foo_0",
                         "id" : 0
                     },
@@ -28,7 +33,7 @@
                 "test-0-action-1": {
                     "action-name": "test-0-action-1",
                     "heartbeat_interval": 2,
-                    "action_resp": {
+                    "action_data": {
                         "bar": "foo_1",
                         "index" : 7
                     },
@@ -37,7 +42,7 @@
                 "test-0-action-2": {
                     "action-name": "test-0-action-0",
                     "heartbeat_interval": 2,
-                    "action_resp": {
+                    "action_data": {
                         "hello": "world",
                         "cnt" : 99
                     },
@@ -68,15 +73,21 @@
                 ],
 
                 "test-0-action-0": {
-                    "0": { "foo_0": "bar_0" }
+                    "action_data": {
+                        "0": { "foo_0": "bar_0" }
+                    }
                 },
 
                 "test-0-action-1": {
-                    "0": { "foo_1": "bar_1" }
+                    "action_data": {
+                        "0": { "foo_1": "bar_1" }
+                    }
                 },
 
                 "test-0-action-2": {
-                    "0": { "foo_2": "bar_2" }
+                    "action_data": {
+                        "0": { "foo_2": "bar_2" }
+                    }
                 }
             },
             "test-main-run": {
@@ -84,33 +95,54 @@
                     "Test main raises request per data here",
                     "Series of requests per anomaly",
                     "Each time a mitigation run is complete for an anomaly",
-                    "the next request in chain is invoked"
-                ]
-                "input": {
-                    "_description" : [
-                        "Input is per anomaly and updatable param for following actions",
-                        "Only tweaks are provided - Hence optiona"
-                    ]
-                    "test-0-action-0": {
-                        "timeout": 10,
-                        "instances": [
-                            {
-                                "instance_id": "instance_id_0",
+                    "the next request in chain is invoked",
+                    "---------------------",
+                    "key = <anomaly action name>",
+                    "run_cnt: Count of runs. Defaults to 1",
+                    "Until run cnt, exhauts, it runs through instances in loop",
+                    "Instances can be empty, in which case all defaulted",
+                    "instances -- List of runs per anomaly",
+                    "Each instance:",
+                    "key: instance id as string. Default: computed",
+                    "Value:",
+                    "   timeout = <timeout for anomaly to return. Base it off pause.",
+                    "               <= 0 no timeout; > 0 timeout in seconds
+                    "               Default: No timeout",
+                    "               Required for test action. Don't provide for real action",
+                    "   instance_id -- Instance ID to use for anomaly. Default: computed",
+                    "   action_data: Expected action resp from plugin for comparison. Optional",
+                    "                   None / absence implies no comparison",
+                    "   result-code: Expected result-code. Optional; None implies no comparison",
+                    "   result-str: Expected result-str. Optional; None implies no comparison",
+                    "   context: Expected input context",
+                    "   set of each bound actions with instance id & timeout & action_data",
+                    "   Every entry is optional",
+                    "----------------"
+                ],
+                "test-0-action-0": {
+                    "run_cnt": 1,
+                    "instances": {
+                        "0": {
+                            "test-0-action-0": {
+                                "instance_id": "id_test_0_action_0",
                                 "timeout": 10,
-                                "test-0-action-1": {
-                                    "timeout": 5
-                                },
-                                "test-0-action-2": {
-                                    "timeout": 6
-                                }
+                                "action_data": "",
+                            },
+                            "test-0-action-1": {
+                                "instance-id": "id_test_0_action_1",
+                                "timeout": 5,
+                                "action_data": None
+                                "context": ""
+                                "result_code": None,
+                                "result_str": None
+                            },
+                            "test-0-action-2": {
+                                "instance-id": "id_test_0_action_2",
+                                "timeout": 6,
+                                "action_data": ""
                             }
                         }
                     }
-                },
-                "output": {
-                    "_description": [
-                        "Output for comparison"
-                    ]
                 }
             }
         }

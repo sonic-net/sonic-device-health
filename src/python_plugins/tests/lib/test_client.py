@@ -62,8 +62,29 @@ ACTION_REQUEST = "action_request"
 ACTION_RESPONSE = "action_response"
 SHUTDOWN = "shutdown"
 
-ATTR_CLIENT_NAME = "client_name"
-ATTR_ACTION_NAME = "action_name"
+# Expected attribute names from CDLL for Action req/resp
+# These can be refreshed from DLL
+# e.g. _get_str_globals("REQ_TYPE")
+#
+REQ_TYPE = "request_type"
+REQ_TYPE_ACTION = "action"
+REQ_TYPE_SHUTDOWN = "shutdown"
+
+REQ_ACTION_NAME = "action_name"
+REQ_INSTANCE_ID = "instance_id"
+REQ_CONTEXT = "context"
+REQ_TIMEOUT = "timeout"
+REQ_HEARTBEAT_INTERVAL = "heartbeat_interval"
+REQ_PAUSE = "action_pause"
+
+REQ_ACTION_DATA = "action_data"
+REQ_RESULT_CODE = "result_code"
+REQ_RESULT_STR = "result_str"
+
+def report_error(errMsg: str):
+    print("ERROR: {}".format(errMsg))
+    return
+
 
 # Caches data in one direction with indices for nxt, cnt to relaize Q full
 # state and data buffer.
@@ -239,17 +260,17 @@ def _is_initialized():
 
 def clib_register_client(cl_name: bytes) -> int:
     if _is_initialized():
-        print("ERROR: Duplicate registration {}".format(cl_name))
+        report_error("Duplicate registration {}".format(cl_name))
         return
 
     l = cl_name.split("_")
     if len(l) <= 1:
         th_local.cache_svc = None
-        print("Proc name must trail with _<n>")
+        report_error("Proc name must trail with _<n>")
         return
 
     index = l[-1]
-    print("Registered:{} taken service index {}".
+    report_error("Registered:{} taken service index {}".
             format(cl_name, index))
     th_local.cache_svc = cache_services[index]
     th_local.cl_name = cl_name
@@ -263,7 +284,7 @@ def clib_register_client(cl_name: bytes) -> int:
 
 def clib_deregister_client(cl_name: bytes) -> int:
     if not _is_initialized():
-        print("deregister_client: ERROR: client not registered {}".format(cl_name))
+        report_error("deregister_client: client not registered {}".format(cl_name))
         return
 
     th_local.cache_svc.write_to_server({
@@ -280,11 +301,11 @@ def clib_deregister_client(cl_name: bytes) -> int:
 
 def clib_register_action(action_name: bytes) -> int:
     if not _is_initialized():
-        print("register_action: ERROR: client not registered {}".format(action_name))
+        report_error("register_action: client not registered {}".format(action_name))
         return
 
     if action_name in th_local.actions:
-        print("ERROR: Duplicate registration {}".format(actrion_name))
+        report_error("Duplicate registration {}".format(actrion_name))
         return
 
     th_local.actions.append(action_name)
@@ -297,11 +318,11 @@ def clib_register_action(action_name: bytes) -> int:
 
 def clib_touch_heartbeat(action_name:bytes, instance_id: bytes):
     if not _is_initialized():
-        print("touch_heartbeat: ERROR: client not registered {}".format(action_name))
+        report_error("touch_heartbeat: client not registered {}".format(action_name))
         return
 
     if action_name not in th_local.actions:
-        print("ERROR: Heartbeat from unregistered action".format(actrion_name))
+        report_error("Heartbeat from unregistered action".format(actrion_name))
         return
 
     th_local.cache_svc.write_to_server({
@@ -315,25 +336,27 @@ def _read_req() -> bool:
     if th_local.req:
         return True
 
-    req_bytes = None
+    req = {}
     while not ret:
-        ret, req_bytes = th_local.cache_svc.read_from_server()
+        ret, req = th_local.cache_svc.read_from_server()
 
-    d = json.loads(req_bytes.decode("utf-8"))
-
-
-    if ((d["request_type"] == "shutdown") or
-            (d["action_name"] in th_local.actions)):
-        th_local.req = req_bytes
-        return True
-    else:
+    if ((len(req) != 1) or (list(req.keys())[0] != ACTION_REQUEST)):
+        report_error("Expect ACTION_REQUESTnt req: {} {}".format(len(req), req.keys()))
         return False
 
-       
+    d = req[ACTION_REQUEST]
+    if ((d["request_type"] != REQ_TYPE_SHUTDOWN) and
+            (d[REQ_ACTION_NAME] not in th_local.actions)):
+        report_error("unknown req/action {}".format(json.dumps(d)))
+        return False
+
+    th_local.req = req
+    return True
+
 
 def clib_read_action_request() -> bytes:
     if not _is_initialized():
-        print("read_action_request: ERROR: client not registered")
+        report_error("read_action_request: client not registered")
         return
 
     # read and also check if 
@@ -341,17 +364,18 @@ def clib_read_action_request() -> bytes:
     while not ret:
         ret = _read_req()
 
-    req = th_local.req
+    req = json.dumps(th_local.req).encode("utf-8")
     th_local.req = None
     return req
 
 
 def clib_write_action_response(resp: bytes) -> int:
     if not _is_initialized():
-        print("write_action_request: ERROR: client not registered")
+        report_error("write_action_request: client not registered")
         return
 
-    th_local.cache_svc.write_to_server(resp)
+    th_local.cache_svc.write_to_server({
+        ACTION_REQUEST: json.loads(resp.decode("utf-8"))
     return 0
 
 
@@ -375,7 +399,7 @@ def _poll(rdfds:[], timeout: int) -> [int]:
 #
 def clib_poll_for_data(fds, cnt:int, timeout: int) -> int:
     if not _is_initialized():
-        print("poll_for_data: ERROR: client not registered")
+        report_error("poll_for_data: client not registered")
         return
 
     recv_signal_fd = th_local.cache_svc.get_signal_rd_fd(False)
@@ -406,19 +430,28 @@ def server_read_request(timeout:int = -1) -> bool, {}:
     if not ret:
         return False, {}
     if len(d) != 1:
-        print("Internal error. Expected one key. ({})".format(json.dumps(d)))
+        report_error("Internal error. Expected one key. ({})".format(json.dumps(d)))
         return False, {}
+    if list(d.keys()][0] != ACTION_REQUEST:
+        report_error("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(d)))
+        return False
+
     return True, d
 
 
 
-def server_write_request(data:{}):
+def server_write_request(data:{}) -> bool:
     # Write is broadcast to all instances
     # The instances filter out requests for their actions
     #
+    if ((len(data) != 1) or (list[data.keys()][0] != ACTION_REQUEST)):
+        report_error("Expect key {} with JSON object of the req as val: {}".
+                format(ACTION_REQUEST, json.dumps(data)))
+        return False
+
     for _, svc in wr_fds:
         svc.write_to_client(data)
-    return
+    return True
 
 
 def parse_reg_client(data: {}) -> str :
@@ -433,3 +466,4 @@ def parse_heartbeat(data: {}) -> str, str, str :
     return (data[ATTR_CLIENT_NAME], 
             data[ATTR_ACTION_NAME], data[ATTR_INSTANCE_ID])
 
+def parse_

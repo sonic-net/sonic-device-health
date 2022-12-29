@@ -63,20 +63,26 @@ def c_lib_init(fl: str) -> bool:
             _clib_poll_for_data.argtypes = [ POINTER(c_int), c_int, c_int ]
             _clib_poll_for_data.restype = c_int
 
+            for i in [ "REQ_TYPE", "REQ_TYPE_ACTION", "REQ_TYPE_SHUTDOWN",
+                    "REQ_ACTION_NAME", "REQ_INSTANCE_ID", "REQ_CONTEXT",
+                    "REQ_TIMEOUT", "REQ_ACTION_DATA", "REQ_RESULT_CODE",
+                    "REQ_RESULT_STR", "REQ_HEARTBEAT_INTERVAL"]:
+                globals[i] = _get_str_globals(i)
+
         except Exception as e:
             log_error("Failed to load functions from CDLL {} err: {}".format(fl, str(e)))
             _clib_dll = None
             return False
     else:
-        _clib_get_last_error = test_client.get_last_error
-        _clib_get_last_error_str = test_client.get_last_error_str
-        _clib_register_client = test_client.register_client
-        _clib_deregister_client = test_client.deregister_client
-        _clib_register_action = test_client.register_action
-        _clib_touch_heartbeat = test_client.touch_heartbeat
-        _clib_read_action_request = test_client.read_action_request
-        _clib_write_action_response = test_client.write_action_response
-        _clib_poll_for_data = test_client.poll_for_data
+        _clib_get_last_error = test_client.clib_get_last_error
+        _clib_get_last_error_str = test_client.clib_get_last_error_str
+        _clib_register_client = test_client.clib_register_client
+        _clib_deregister_client = test_client.clib_deregister_client
+        _clib_register_action = test_client.clib_register_action
+        _clib_touch_heartbeat = test_client.clib_touch_heartbeat
+        _clib_read_action_request = test_client.clib_read_action_request
+        _clib_write_action_response = test_client.clib_write_action_response
+        _clib_poll_for_data = test_client.clib_poll_for_data
         _clib_dll = "Test mode"
 
     return True

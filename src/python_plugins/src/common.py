@@ -89,7 +89,7 @@ def get_global_rc() -> {}:
 
 
     _global_rc_data = {key:value for key, value in d.items() if not key.startswith("_")}
-    return global_rc_data
+    return _global_rc_data
 
 
 def get_config_path(static = False) -> str:
@@ -98,9 +98,9 @@ def get_config_path(static = False) -> str:
         return ""
 
     if static:
-        return os.path.join(_CT_PATH, v["config-static-path"])
+        return os.path.join(_CT_PATH, d["config-static-path"])
     else:
-        return os.path.join(_CT_PATH, v["config-running-path"])
+        return os.path.join(_CT_PATH, d["config-running-path"])
 
 
 def get_proc_plugins_conf_file(static = False):
