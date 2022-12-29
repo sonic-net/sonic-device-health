@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import sys
+import time
 
 import clib_bind
 
@@ -70,7 +71,9 @@ ACTIVE_POLL_TIMEOUT = 1
 # The handler is only registered for SIGHUP & SIGTERM
 #
 def signal_handler(signum, frame):
-    global signal_raised, sigterm_raised
+    global signal_raised, sigterm_raised, sigusr1_raised
+
+    log_info("signal_handler({}) called".format(signum))
     signal_raised = True
     if signum == signal.SIGUSR1:
         sigusr1_raised = True
@@ -416,7 +419,6 @@ def main_run(proc_name: str) -> int:
         return -1
 
     while not signal_raised:
-        # 
         ret = clib_bind.poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
 
         if ret == -1:
@@ -455,13 +457,13 @@ def main(proc_name, global_rc_file):
 
     syslog_init(proc_name)
 
-    if not clib_bind.c_lib_init():
-        log_error("Failed to init CLIB")
-        return
-
     signal.signal(signal.SIGHUP, signal_handler)
     signal.signal(signal.SIGUSR1, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    if not clib_bind.c_lib_init():
+        log_error("Failed to init CLIB")
+        return
 
 
     while (not shutdown_request) and (not sigterm_raised):

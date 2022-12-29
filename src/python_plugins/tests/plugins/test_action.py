@@ -29,7 +29,7 @@ class LoMPlugin:
         self.action_name = self.action_config["action_name"]
         self.valid = True
         self.hb_callback = fn_hb
-        self.shutdown = False
+        self.shutdown_done = False
         self.req_idx = 0
         print("test_action.py: LoMPlugin created for {}".format(self.action_name))
         
@@ -39,7 +39,7 @@ class LoMPlugin:
 
 
     def is_valid(self) -> bool:
-        return self.valid and not self.shutdown
+        return self.valid and not self.shutdown_done
 
     
     def _get_resp(self) -> str:
@@ -47,7 +47,7 @@ class LoMPlugin:
         return json.dumps(resp)
 
 
-    def request(req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
+    def request(self, req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
         ret = clib_bind.ActionResponse (self.action_name, req.instance_id, _get_resp(), 0, "")
 
         if not self.valid:
@@ -76,7 +76,7 @@ class LoMPlugin:
             inst_id = self.req.instance_id
 
             n = 0;
-            while (not self.shutdown) and (n < pause):
+            while (not self.shutdown_done) and (n < pause):
                 time.sleep(hb_int)
                 self.hb_callback(inst_id)
                 n += hb_int
@@ -84,12 +84,12 @@ class LoMPlugin:
         return ret
 
 
-    def shutdown():
+    def shutdown(self):
         # Request from main process on a different thread.
         # Use this to release resources
         # Don't block
         # if request is currently running, indicate the shutdown
         # so it could abort.
         #
-        self.shutdown = True
+        self.shutdown_done = True
 

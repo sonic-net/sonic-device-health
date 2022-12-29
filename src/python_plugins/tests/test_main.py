@@ -225,7 +225,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     # init clib after runnig config is ready
     test_client.clib_init()
 
-    for path in testcase_data["plugin_paths"]:
+    for path in global_rc_data["plugin_paths"]:
         # path can be absolute or relative to this filepath.
         syspath_append(os.path.join(_CT_DIR, path))
 

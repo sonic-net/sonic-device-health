@@ -382,8 +382,10 @@ def _poll(rdfds:[], timeout: int) -> [int]:
         r, _, _ = select.select(rdfds, [], [], poll_wait)
         if r:
             return r
+
         if timeout == 0:
             return []
+
     return []
 
 
@@ -408,6 +410,8 @@ def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
                 # Continue to poll
             else:
                 return r[0]
+        elif timeout > 0:
+            return -2
 
 
 ## Server side read/write wrappers
