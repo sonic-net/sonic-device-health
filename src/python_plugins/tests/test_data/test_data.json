@@ -6,7 +6,8 @@
             "global_rc_name":  "globals.rc.json",
             "proc_plugins_conf_name":  "proc_plugins.json",
             "actions_config_name": "actions_conf.json",
-            "actions_binding_config_name": "actions_binding.json"
+            "actions_binding_config_name": "actions_binding.json",
+            "plugin_paths": [ ".", "./plugins", "../tests/plugins", "../tests/lib" ]
         }
     },
     "test_cases": {
@@ -16,7 +17,6 @@
                 "plugin paths provide paths to plugins, if different",
                 "from plugins dir under tests"
             ],
-            "plugin_paths": [],
             "actions_config": {
                 "_description": [
                    "Action names should start with alpha [a-z]"
@@ -40,7 +40,7 @@
                     "action_pause": 0
                 },
                 "test-0-action-2": {
-                    "action_name": "test-0-action-0",
+                    "action_name": "test-0-action-2",
                     "heartbeat_interval": 2,
                     "action_data": {
                         "hello": "world",

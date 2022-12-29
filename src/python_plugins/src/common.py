@@ -1,9 +1,13 @@
 #! /usr/bin/env python
 
 import ctypes
+import json
 import os
 import sys
+import syslog
 from typing import NamedTuple
+
+import gvars
 
 # python_proc overrides this path via args, if provided.
 GLOBAL_RC_FILE = "/etc/LoM/global.rc.json"
@@ -32,19 +36,34 @@ def syslog_init(proc_name:str):
     name = os.path.basename(sys.argv[0]) + "_" + proc_name
     syslog.openlog(name, syslog.LOG_PID)
 
+_lvl_to_str = [
+        "Emergency",
+        "Alert",
+        "Critical",
+        "Error",
+        "Warning",
+        "Notice",
+        "Informational",
+        "Debug"
+    ]
 
-def log_write(lvl: int, msg:str):
+
+def _log_write(lvl: int, msg:str):
     syslog.syslog(lvl, msg)
+    print("Log({}): {}".format(_lvl_to_str[lvl], msg))
 
 
 def log_error(msg:str):
-    syslog.syslog(syslog.LOG_ERR, msg)
+    _log_write(syslog.LOG_ERR, msg)
 
 def log_info(msg:str):
-    syslog.syslog(syslog.LOG_INFO, msg)
+    _log_write(syslog.LOG_INFO, msg)
 
 def log_warning(msg:str):
-    syslog.syslog(syslog.LOG_WARNING, msg)
+    _log_write(syslog.LOG_WARNING, msg)
+
+def log_debug(msg:str):
+    _log_write(syslog.LOG_DEBUG, msg)
 
 
 # *******************************
@@ -65,9 +84,17 @@ def log_warning(msg:str):
 #
 _global_rc_data = {}
 
+def set_global_rc_file(fl:str):
+    global GLOBAL_RC_FILE
+
+    GLOBAL_RC_FILE = fl
+
+
 def get_global_rc() -> {}:
+    global _global_rc_data
+
     if _global_rc_data:
-        return global_rc_data
+        return _global_rc_data
 
     if not os.path.exists(GLOBAL_RC_FILE):
         log_error("Missing global rc file {}".format(GLOBAL_RC_FILE))
@@ -98,9 +125,9 @@ def get_config_path(static = False) -> str:
         return ""
 
     if static:
-        return os.path.join(_CT_PATH, d["config-static-path"])
+        return os.path.join(_CT_PATH, d["config_static_path"])
     else:
-        return os.path.join(_CT_PATH, d["config-running-path"])
+        return os.path.join(_CT_PATH, d["config_running_path"])
 
 
 def get_proc_plugins_conf_file(static = False):
@@ -156,7 +183,10 @@ def _get_data(fl:str) -> {}:
 
 
 def get_proc_plugins_conf(proc_name:str = "") -> {}:
-    return _get_data(get_proc_plugins_conf_file()).get(proc_name, {})
+    d = _get_data(get_proc_plugins_conf_file())
+    if not proc_name:
+        return d
+    return d.get(proc_name, {})
 
 
 def get_actions_conf() -> {}:
@@ -168,4 +198,9 @@ def get_actions_binding_conf(action_name:str) -> {}:
     if action_name:
         d = d.get(action_name, {})
     return d
+
+
+def set_test_mode():
+    gvars.TEST_RUN = True
+    print("Running in TEST mode ****************")
 

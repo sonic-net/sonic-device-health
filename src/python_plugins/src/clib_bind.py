@@ -1,29 +1,42 @@
 #! /usr/bin/env python3
 
-from common.py import *
-import gvar
+from common import *
+import gvars
 
 # *******************************
 # c-bindings related info
 # *******************************
 #
 
-if gvars.TEST_RUN:
-    import test_client
-    log_debug("Running in test mode")
+# TODO: Get list of error codes defined for various errors
 
+# Set Clib .so file path here
+CLIB_DLL_FILE = None
 
 _clib_dll = None
+_clib_get_last_error = None
+_clib_get_last_error_str = None
+_clib_register_client = None
+_clib_deregister_client = None
+_clib_register_action = None
+_clib_touch_heartbeat = None
+_clib_read_action_request = None
+_clib_write_action_response = None
+_clib_poll_for_data = None
 
 
-def c_lib_init(fl: str) -> bool:
+def c_lib_init() -> bool:
     global _clib_dll
+    global _clib_get_last_error, _clib_get_last_error_str, _clib_register_client
+    global _clib_deregister_client, _clib_register_action, _clib_touch_heartbeat
+    global _clib_read_action_request, _clib_write_action_response, _clib_poll_for_data
+
 
     if not gvars.TEST_RUN:
         try:
-            _clib_dll = ctypes.CDLL(fl)
+            _clib_dll = ctypes.CDLL(CLIB_DLL_FILE)
         except OSError as e:
-            log_error("Failed to load CDLL {} err: {}".format(fl, str(e)))
+            log_error("Failed to load CDLL {} err: {}".format(CLIB_DLL_FILE, str(e)))
             return False
 
         try:
@@ -67,10 +80,18 @@ def c_lib_init(fl: str) -> bool:
             _update_globals()
 
         except Exception as e:
-            log_error("Failed to load functions from CDLL {} err: {}".format(fl, str(e)))
+            log_error("Failed to load functions from CDLL {} err: {}".
+                    format(CLIB_DLL_FILE, str(e)))
             _clib_dll = None
             return False
     else:
+        import test_client
+        log_debug("clib in test mode")
+
+        if not test_client.clib_init():
+            log_error("Failed to init test_client.clib_init")
+            return False
+
         _clib_get_last_error = test_client.clib_get_last_error
         _clib_get_last_error_str = test_client.clib_get_last_error_str
         _clib_register_client = test_client.clib_register_client
@@ -81,7 +102,7 @@ def c_lib_init(fl: str) -> bool:
         _clib_write_action_response = test_client.clib_write_action_response
         _clib_poll_for_data = test_client.clib_poll_for_data
         _clib_dll = "Test mode"
-
+        
     return True
 
 
@@ -92,13 +113,13 @@ def validate_dll():
     return True
 
 
-def get_last_error(): -> (err: int, errstr: str):
+def get_last_error() -> (int, str):
     return _clib_get_last_error(), _clib_get_last_error_str()
 
 
-def print_clib_error(m:str, ret:int):
+def _print_clib_error(m:str, ret:int):
     err, estr = get_last_error()
-    log_error({}: ret:{} last_error:{} ({})".format(m, ret, err, estr))
+    log_error("{}: ret:{} last_error:{} ({})".format(m, ret, err, estr))
 
 
 def register_client(proc_id: str) -> bool:
@@ -107,7 +128,7 @@ def register_client(proc_id: str) -> bool:
 
     ret = _clib_register_client(proc_id.encode("utf-8"))
     if ret != 0:
-        print_clib_error("register_client failed", ret)
+        log_error("register_client failed for {}".format(proc_id))
         return False
     return True
 
@@ -118,8 +139,10 @@ def register_action(action: str) -> bool:
 
     ret = _clib_register_action(action.encode("utf-8"))
     if ret != 0:
-        print_clib_error("register_action failed", ret)
+        log_error("register_action failed {}".format(action))
         return False
+
+    log_info("clib_bind: register_action {}".format(action))
     return True
 
 
@@ -136,7 +159,7 @@ def touch_heartbeat(action: str, instance_id: str) -> bool:
 
     ret = _clib_touch_heartbeat(action.encode("utf-8"), instance_id.encode("utf-8"))
     if ret != 0:
-        print_clib_error("touch_heartbeat failed", ret)
+        log_error("touch_heartbeat failed action:{} id:{}".format(action, instance_id))
         return False
     return True
 
@@ -172,7 +195,7 @@ class ActionRequest:
         return self.type == gvars.REQ_TYPE_SHUTDOWN
 
 
-def read_action_request() -> bool, ActionRequest:
+def read_action_request() -> (bool, ActionRequest):
     if not validate_dll():
         return False, {}
 
@@ -181,7 +204,7 @@ def read_action_request() -> bool, ActionRequest:
     if not req:
         e, estr = get_last_error()
         if e:
-            print_clib_error("read_action_request failed", 0)
+            log_error("read_action_request failed")
         return False, None
 
     return True, ActionRequest(req)
@@ -193,7 +216,7 @@ class ActionResponse:
             instance_id:str,
             action_data: str,
             result_code:int,
-            result_str:st) :
+            result_str:str) :
         self.data = json.dumps({
                 gvars.REQ_ACTION_NAME: action_name,
                 gvars.REQ_INSTANCE_ID: instance_id,
@@ -202,11 +225,11 @@ class ActionResponse:
                 gvars.REQ_RESULT_STR : result_str })
 
                 
-    def value(self): -> str:
+    def value(self) -> str:
         return self.data 
 
 
-def write_action_response(res: ActionResponse) -> bool
+def write_action_response(res: ActionResponse) -> bool:
     if not validate_dll():
         return False
 
@@ -214,16 +237,19 @@ def write_action_response(res: ActionResponse) -> bool
             ActionResponse.value().encode("utf-8"))
 
     if ret != 0:
-        print_clib_error("write_action_response failed", ret)
+        log_error("write_action_response failed")
         return False
 
     return True
 
 
-def poll_for_data(lst_fds: list[int], timeout:int) -> int:
+def poll_for_data(lst_fds: [int], timeout:int) -> int:
     if not validate_dll():
         return False
 
-    return _clib_poll_for_data((c_int*len(lst_fds))(*lst_fds), len(lst_fds), timeout)
+    if not gvars.TEST_RUN:
+        return _clib_poll_for_data((c_int*len(lst_fds))(*lst_fds), len(lst_fds), timeout)
+    else:
+        return _clib_poll_for_data(lst_fds, len(lst_fds), timeout)
 
 

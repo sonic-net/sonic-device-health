@@ -4,17 +4,24 @@ import argparse
 import importlib
 import json
 import os
+import signal
 import sys
+
+import clib_bind
 
 from common import *
 import gvars
-get_vendor_import_path()
+
+_CT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # helpers are vendor specific.
-import helpers
+# TODO get vendor specific helpers for publish
+# Likely ln -s ...helpers.py <vendor file>
+# import helpers
 
 # Globals
 signal_raised = False
+sigusr1_raised = False
 sigterm_raised = False
 shutdown_request = False
 
@@ -58,18 +65,16 @@ ACTIVE_POLL_TIMEOUT = 1
 #   Generally, prefer not using signals. Hence keep it as fallback.
 #
 
-# Useful when any vendor specific need arises.
-vendor = vendorType.UNKNOWN
-
-
 # Register signal in global variable
 # Anything but SIGTERM is used for re-reading config
 # The handler is only registered for SIGHUP & SIGTERM
 #
-signal_handler(signum, frame):
+def signal_handler(signum, frame):
     global signal_raised, sigterm_raised
     signal_raised = True
-    if signum == signal.SIGTERM
+    if signum == signal.SIGUSR1:
+        sigusr1_raised = True
+    elif signum == signal.SIGTERM:
         sigterm_raised = True
 
 
@@ -113,8 +118,6 @@ class LoMPluginHolder:
             module_name = os.path.basename(plugin_file)
 
 
-        module_name = ".".join(plugin_file.split(".")[0:-1])
-       
         self.plugin = None      # Loaded plugin object
         self.fdR = None         # Pipe read-end to receive signal from request called thread
         self.fdW = None         # Pipe write-end written by req thread when plugin
@@ -135,7 +138,7 @@ class LoMPluginHolder:
 
         try:
             module = importlib.import_module(module_name)
-            plugin = getattr(module, "LoMPlugin")(config, do_touch_hearbeat)
+            plugin = getattr(module, "LoMPlugin")(config, self.do_touch_hearbeat)
             if name != plugin.getName():
                 log_error("Action name mismatch in plugin_procs_actions.conf.json")
                 return
@@ -144,7 +147,7 @@ class LoMPluginHolder:
                 log_error("Failed to init plugin {}".format(plugin))
                 return
 
-            ret = register_plugin(name)
+            ret = clib_bind.register_action(name)
             if not ret:
                 log_error("Failed to register action {} plugin:{}".format(
                     name, plugin_file))
@@ -155,12 +158,13 @@ class LoMPluginHolder:
             log_info("Loaded plugin {} from {}".format(name, plugin_file))
 
         except Exception as e:
-            log_error("Failed to create plugin {}".format(plugin_file))
+            log_error("Failed to create plugin {} e={}".format(plugin_file, str(e)))
 
         return
 
-    def __del__():
+    def __del__(self):
         self.plugin = None
+        return
 
 
     def is_valid(self):
@@ -194,7 +198,7 @@ class LoMPluginHolder:
     def send_heartbeat(self) -> bool:
         if self.touchSent != self.touch:
             self.touchSent = self.touch
-            touch_heartbeat(self.name, self.instance_id)
+            clib_bind.touch_heartbeat(self.name, self.instance_id)
     
 
     def set_pipe(self, fdR:int, fdW:int):
@@ -281,13 +285,13 @@ class LoMPluginHolder:
 
         # Write response to backend server/engine.
         #
-        write_action_response(self.response)
+        clib_bind.write_action_response(self.response)
 
         log_info("{}: request taken:{} process-pause:{}".format(
             self.name, self.req_end - self.req_start, tnow - self.req_end))
 
 
-    def request(self, req:ActionRequest):
+    def request(self, req:clib_bind.ActionRequest):
         # Called by main thread upon receiving request call to 
         # this plugin from the backend engine / server.
         #
@@ -340,7 +344,7 @@ def handle_shutdown(active_plugin_holders: {}):
 
 
 def handle_server_request(active_plugin_holders: {}):
-    ret, req = read_action_request()
+    ret, req = clib_bind.read_action_request()
     action_name = req.action_name
     if not ret:
         log_error("Failed to read server request upon poll") 
@@ -362,11 +366,11 @@ def handle_server_request(active_plugin_holders: {}):
 
 
 def handle_plugin_holder(plugin_holder: LoMPluginHolder):
-    plugin_holder->handle_response()
+    plugin_holder.handle_response()
     return
 
 
-def main_run(proc_name: str):
+def main_run(proc_name: str) -> int:
 
     pipe_list = {}
     active_plugin_holders = {}
@@ -380,23 +384,26 @@ def main_run(proc_name: str):
     plugins = get_proc_plugins_conf(proc_name)
     actions_conf = get_actions_conf()
 
-    if not register_client(proc_name):
+    if not clib_bind.register_client(proc_name):
         log_error("Failing to register client {} with server".format(proc_name))
-        return
+        return -1
 
     try:
         for name, path in plugins.items():
+            print("------------ name:{} path:{} ------------".format(name,  path))
             conf = actions_conf.get(name, {})
-            disabled = conf.get("disable", True)
+            disabled = conf.get("disable", False)
             if not disabled:
                 pluginHolder = LoMPluginHolder(name, path, conf)
-                if pluginHolder.isValid():
+                if pluginHolder.is_valid():
                     fdR, fdW = os.pipe()
                     pluginHolder.set_pipe(fdR, fdW)
                 else:
                     log_error("Failed to register plugin {} from {}".format(
                         name, path))
+                    return -1
 
+                print("one plugin DONE")
                 active_plugin_holders[name] = pluginHolder
                 pipe_list[fdR] = name
             else:
@@ -404,9 +411,13 @@ def main_run(proc_name: str):
     except Exception as e:
         log_error("{}: plugin failure: exception:{}".format(proc_name, str(e)))
 
+    if not pipe_list:
+        log_error("No loaded plugin. Exiting. plugins:{}".format(plugins.keys()))
+        return -1
+
     while not signal_raised:
         # 
-        ret = poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
+        ret = clib_bind.poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
 
         if ret == -1:
             handle_server_request(active_plugin_holders)
@@ -423,30 +434,43 @@ def main_run(proc_name: str):
 
 
     # SIGHUP need a reload of everything.
-    deregister_client(proc_name)
+    clib_bind.deregister_client(proc_name)
 
     if (not shutdown_request) and signal_raised:
         handle_shutdown(active_plugin_holders)
-    return
+    return 0
 
 
 
-def main(proc_name, global_rc):
-    if global_rc:
-        globals()["GLOBAL_RC_FILE"] = args.global_rc
+def main(proc_name, global_rc_file):
+    if global_rc_file:
+        set_global_rc_file(global_rc_file)
+
+    # Load plugin syspaths
+    syspaths = get_global_rc().get("plugin_paths", [])
+    for p in syspaths:
+        rp = os.path.join(_CT_DIR, p)
+        syspath_append(rp)
+        print("Registered sys {}".format(rp))
 
     syslog_init(proc_name)
 
-    if not c_lib_init(CLIB_DLL_FILE):
-        log_error("Failed to init CLIB from {}".format(CLIB_DLL_FILE))
+    if not clib_bind.c_lib_init():
+        log_error("Failed to init CLIB")
         return
 
     signal.signal(signal.SIGHUP, signal_handler)
+    signal.signal(signal.SIGUSR1, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
 
     while (not shutdown_request) and (not sigterm_raised):
-        main_run(proc_name)
+        if (main_run(proc_name) != 0):
+            log_error("Exiting due to error")
+            break
+        if sigusr1_raised:
+            log_info("Exiting upon SIGUSR1")
+            break
 
 
 if __name__ == "__main__":
@@ -455,7 +479,14 @@ if __name__ == "__main__":
             help="Name of this process. The config maps the plugins")
     parser.add_argument("-g", "--global-rc", default="", 
             help="Path of the global rc file")
+    parser.add_argument("-t", "--test", action='store_true',
+            help="Run in test mode", default=False)
     args = parser.parse_args()
+
+    if args.test:
+        set_test_mode()
+
+    print("rc={}".format(args.global_rc))
 
     main(args.proc_name, args.global_rc)
 

@@ -1,9 +1,11 @@
 #! /usr/bin/env python3
 
+import argparse
 import json
 import os
 import sys
-import argparse
+import threading
+import importlib
 
 _CT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(_CT_DIR, "..", "src"))
@@ -193,7 +195,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     #
     procs_conf = write_conf(os.path.join(cfg_dir, global_rc_data["proc_plugins_conf_name"]),
             testcase_data["procs_config"])
-    test_client.create_cache_services(len(procs_conf))
 
     actions_conf = write_conf(os.path.join(cfg_dir, global_rc_data["actions_config_name"]),
             testcase_data["actions_config"])
@@ -206,14 +207,11 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         s.write(json.dumps(global_rc_data, indent=4))
 
 
-    if test_case.endswith("0"):
-        print("Terminating early")
-        return
-
     # Set test plugins data in globals
     # As plugins are loaded by another thread in the same process
     # they could access this.
     #
+
     for k, v in testcase_data.get("test_plugin_data", {}).items():
         if not k.startswith("_"):
             globals()[k] = v
@@ -223,6 +221,9 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     syspath_append(os.path.join(_CT_DIR, "lib"))
     syspath_append(os.path.join(_CT_DIR, "plugins"))
     syspath_append(os.path.join(_CT_DIR, "..", "src"))
+
+    # init clib after runnig config is ready
+    test_client.clib_init()
 
     for path in testcase_data["plugin_paths"]:
         # path can be absolute or relative to this filepath.

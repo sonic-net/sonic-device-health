@@ -2,6 +2,7 @@
 
 from enum import Enum
 import os
+import select
 import time
 import threading
 
@@ -55,7 +56,7 @@ CACHE_LIMIT = 10
 shutdown = False
 
 def report_error(errMsg: str):
-    print("ERROR: {}".format(errMsg))
+    log_error("ERROR: {}".format(errMsg))
     return
 
 
@@ -108,7 +109,7 @@ class CacheData:
         if self.wr_index >= self.limit:
             self.wr_index = 0
         self.wr_cnt += 1
-        _raise_signal()
+        self._raise_signal()
         return True
 
 
@@ -205,6 +206,8 @@ def create_cache_services(cnt:int):
         wr_fds[p.get_signal_wr_fd(False)] = p
 
 
+# TODO: Mimic error codes defined from clib_bind
+
 test_error_code = 0
 test_error_str = ""
 
@@ -213,18 +216,27 @@ test_error_str = ""
 # Mocked clib client calls
 #
 def reset_error():
-    global error_code, error_str
+    global test_error_code, test_error_str
 
-    error_code = 0
-    error_str = ""
+    test_error_code = 0
+    test_error_str = ""
+
+
+def clib_init() -> bool:
+    cnt = len(get_proc_plugins_conf())
+    if (cnt <= 0) or (cnt > 100):
+        log_error("Invalid count of proc entries cnt={}".format(cnt))
+        return False
+    create_cache_services(cnt)
+    return True
 
 
 def clib_get_last_error() -> int:
-    return error_code
+    return test_error_code
 
 
 def clib_get_last_error_str() -> str:
-    return error_str
+    return test_error_str
 
 
 def _is_initialized():
@@ -234,16 +246,22 @@ def _is_initialized():
 def clib_register_client(cl_name: bytes) -> int:
     if _is_initialized():
         report_error("Duplicate registration {}".format(cl_name))
-        return
+        return -1
 
-    l = cl_name.split("_")
+    l = cl_name.decode("utf-8").split("_")
     if len(l) <= 1:
-        th_local.cache_svc = None
         report_error("Proc name must trail with _<n>")
-        return
+        return -1
 
-    index = l[-1]
-    report_error("Registered:{} taken service index {}".
+    index = int(l[-1])
+    if index >= len(cache_services):
+        # Proc index must run from 0 sequentially as services
+        # are created for count of entries in proc's conf.
+        #
+        report_error("Index {} > cnt {}".format(index, cnt))
+        return -1
+
+    log_info("Registered:{} taken service index {}".
             format(cl_name, index))
     th_local.cache_svc = cache_services[index]
     th_local.cl_name = cl_name
@@ -252,7 +270,7 @@ def clib_register_client(cl_name: bytes) -> int:
     th_local.cache_svc.write_to_server({
         gvars.REQ_REGISTER_CLIENT: {
             gvars.REQ_CLIENT_NAME: cl_name.decode("utf-8") }})
-    return
+    return 0
 
 
 def clib_deregister_client(cl_name: bytes) -> int:
@@ -275,18 +293,18 @@ def clib_deregister_client(cl_name: bytes) -> int:
 def clib_register_action(action_name: bytes) -> int:
     if not _is_initialized():
         report_error("register_action: client not registered {}".format(action_name))
-        return
+        return -1
 
     if action_name in th_local.actions:
         report_error("Duplicate registration {}".format(actrion_name))
-        return
+        return -2
 
     th_local.actions.append(action_name)
     th_local.cache_svc.write_to_server({
         gvars.REQ_REGISTER_ACTION: {
             gvars.REQ_ACTION_NAME: action_name.decode("utf-8"),
             gvars.REQ_CLIENT_NAME: th_local.cl_name }})
-    return
+    return 0
 
 
 def clib_touch_heartbeat(action_name:bytes, instance_id: bytes):
@@ -365,12 +383,13 @@ def _poll(rdfds:[], timeout: int) -> [int]:
         if r:
             return r
         if timeout == 0:
-            return -2
+            return []
+    return []
 
 
 # Called by client - here the Plugin Process
 #
-def clib_poll_for_data(fds, cnt:int, timeout: int) -> int:
+def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
     if not _is_initialized():
         report_error("poll_for_data: client not registered")
         return
@@ -380,14 +399,15 @@ def clib_poll_for_data(fds, cnt:int, timeout: int) -> int:
 
     while (not shutdown):
         r = _poll(lst, timeout)
-        if r[0] == recv_signal_fd:
-            # Return only if action matches calling client.
-            _read_req()
-            if th_local.req:
-                return -1
-            # Continue to poll
-        else:
-            return r[0]
+        if r:
+            if recv_signal_fd in r:
+                # Return only if action matches calling client.
+                _read_req()
+                if th_local.req:
+                    return -1
+                # Continue to poll
+            else:
+                return r[0]
 
 
 ## Server side read/write wrappers
