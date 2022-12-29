@@ -9,11 +9,9 @@ import json
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', "src"))
-import common
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from common import *
 import test_client
+import gvars
 
 # Test Anomaly
 #
@@ -51,7 +49,7 @@ class LoMPlugin:
 
     
     def _get_resp() -> {}:
-        resp = self.action_config.get(test_client.REQ_ACTION_DATA, DEFAULT_RESP)
+        resp = self.action_config.get(gvars.REQ_ACTION_DATA, DEFAULT_RESP)
         
         if self.global_resp:
             added = self.global_resp,get(str(self.req_idx), {})
@@ -77,7 +75,7 @@ class LoMPlugin:
             ret.result_code = 2
             ret.result_str "Mismatch in action name"
             
-        elif req.context != _get_global(test_client.REQ_CONTEXT, req.context):
+        elif req.context != _get_global(gvars.REQ_CONTEXT, req.context):
             log_error("{}: Mismatch in action name".format(self.action_name))
             ret.result_code = 2
             ret.result_str "Mismatch in action name"
@@ -88,8 +86,8 @@ class LoMPlugin:
             ret.result_str "Misssing instance id"
             
         else:
-            pause = int(self.action_config.get(test_client.REQ_PAUSE, 3))
-            hb_int = self.action_config.get(test_client.REQ_HEARTBEAT_INTERVAL, 1)
+            pause = int(self.action_config.get(gvars.REQ_PAUSE, 3))
+            hb_int = self.action_config.get(gvars.REQ_HEARTBEAT_INTERVAL, 1)
             inst_id = self.req.instance_id
 
             n = 0;

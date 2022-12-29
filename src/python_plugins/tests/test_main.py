@@ -10,6 +10,7 @@ _CT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(_CT_DIR, "..", "src")
 
 from common import *
+import gvars
 
 TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
@@ -106,13 +107,13 @@ class AnomalyHandler:
 
     def _write_request(self):
         # Send request to anomaly action
-        self.ct_instance_id = _get_inst_val(test_client.REQ_INSTANCE_ID)
-        server_write_request({ test_client.ACTION_REQUEST: {
-            test_client.REQ_TYPE: test_client.REQ_TYPE_ACTION,
-            test_client.REQ_ACTION_NAME: _get_ct_action_name(),
-            test_client.REQ_INSTANCE_ID: self.ct_instance_id,
-            test_client.REQ_CONTEXT: _get_inst_val(test_client.REQ_CONTEXT),
-            test_client.REQ_TIMEOUT: _get_inst_val(test_client.REQ_TIMEOUT)}})
+        self.ct_instance_id = _get_inst_val(gvars.REQ_INSTANCE_ID)
+        server_write_request({ gvars.ACTION_REQUEST: {
+            gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
+            gvars.REQ_ACTION_NAME: _get_ct_action_name(),
+            gvars.REQ_INSTANCE_ID: self.ct_instance_id,
+            gvars.REQ_CONTEXT: _get_inst_val(gvars.REQ_CONTEXT),
+            gvars.REQ_TIMEOUT: _get_inst_val(gvars.REQ_TIMEOUT)}})
         return
 
     def process(self, req:{}) -> bool:
@@ -128,8 +129,8 @@ class AnomalyHandler:
             return False
 
         test_act_data = self.test_inst.get(action_name, {})
-        for attr in [test_client.REQ_ACTION_DATA, test_client.REQ_RESULT_CODE,
-                test_client.REQ_RESULT_Str]:
+        for attr in [gvars.REQ_ACTION_DATA, gvars.REQ_RESULT_CODE,
+                gvars.REQ_RESULT_Str]:
             val_expect = test_act_data.get(attr, None)
             if val_expect != None:
                 if req[attr] != val_expect:
@@ -313,8 +314,8 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
             elif list(req.keys()][0] != ACTION_REQUEST:
                 print("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(req)))
                 ret = False
-            elif (req[ACTION_REQUEST][test_client.REQ_TYPE] !=
-                    test_client.REQ_TYPE_ACTION):
+            elif (req[ACTION_REQUEST][gvars.REQ_TYPE] !=
+                    gvars.REQ_TYPE_ACTION):
                 print("Internal error. Expected only {} from client".format(json.dumps(req)))
                 ret = False
 

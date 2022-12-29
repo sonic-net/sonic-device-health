@@ -7,6 +7,7 @@ import os
 import sys
 
 from common import *
+import gvars
 get_vendor_import_path()
 
 # helpers are vendor specific.

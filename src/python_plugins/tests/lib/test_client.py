@@ -5,6 +5,8 @@ import os
 import time
 import threading
 
+import gvars
+
 from common import *
 
 # This module helps mock c-bindings calls to server.
@@ -51,35 +53,6 @@ th_local = threading.local(()
 CACHE_LIMIT = 10
 
 shutdown = False
-
-# requests
-# These are between clib client & server, hence mocked here.
-REGISTER_CLIENT = "register_client"
-DEREGISTER_CLIENT = "deregister_client"
-REGISTER_ACTION = "register_action"
-HEARTBEAT = "heartbeat"
-ACTION_REQUEST = "action_request"
-ACTION_RESPONSE = "action_response"
-SHUTDOWN = "shutdown"
-
-# Expected attribute names from CDLL for Action req/resp
-# These can be refreshed from DLL
-# e.g. _get_str_globals("REQ_TYPE")
-#
-REQ_TYPE = "request_type"
-REQ_TYPE_ACTION = "action"
-REQ_TYPE_SHUTDOWN = "shutdown"
-
-REQ_ACTION_NAME = "action_name"
-REQ_INSTANCE_ID = "instance_id"
-REQ_CONTEXT = "context"
-REQ_TIMEOUT = "timeout"
-REQ_HEARTBEAT_INTERVAL = "heartbeat_interval"
-REQ_PAUSE = "action_pause"
-
-REQ_ACTION_DATA = "action_data"
-REQ_RESULT_CODE = "result_code"
-REQ_RESULT_STR = "result_str"
 
 def report_error(errMsg: str):
     print("ERROR: {}".format(errMsg))
@@ -277,8 +250,8 @@ def clib_register_client(cl_name: bytes) -> int:
     th_local.actions = []
 
     th_local.cache_svc.write_to_server({
-        REGISTER_CLIENT: {
-            ATTR_CLIENT_NAME: cl_name.decode("utf-8") }})
+        gvars.REQ_REGISTER_CLIENT: {
+            gvars.REQ_CLIENT_NAME: cl_name.decode("utf-8") }})
         return
 
 
@@ -288,8 +261,8 @@ def clib_deregister_client(cl_name: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        DEREGISTER_CLIENT: {
-            ATTR_CLIENT_NAME: cl_name.decode("utf-8") }})
+        gvars.REQ_DEREGISTER_CLIENT: {
+            gvars.REQ_CLIENT_NAME: cl_name.decode("utf-8") }})
     
     # Clean local cache
     th_local.cache_svc = None
@@ -310,9 +283,9 @@ def clib_register_action(action_name: bytes) -> int:
 
     th_local.actions.append(action_name)
     th_local.cache_svc.write_to_server({
-        REGISTER_ACTION: {
-            ATTR_ACTION_NAME: action_name.decode("utf-8"),
-            ATTR_CLIENT_NAME: th_local.cl_name }})
+        gvars.REQ_REGISTER_ACTION: {
+            gvars.REQ_ACTION_NAME: action_name.decode("utf-8"),
+            gvars.REQ_CLIENT_NAME: th_local.cl_name }})
     return
 
 
@@ -326,10 +299,10 @@ def clib_touch_heartbeat(action_name:bytes, instance_id: bytes):
         return
 
     th_local.cache_svc.write_to_server({
-        HEARTBEAT: {
-            ATTR_CLIENT_NAME: th_local.cl_name,
-            ATTR_ACTION_NAME: action_name.decode("utf-8"),
-            ATTR_INSTANCE_ID: instance_id.decode("utf-8") }})
+        gvars.REQ_HEARTBEAT: {
+            gvars.REQ_CLIENT_NAME: th_local.cl_name,
+            gvars.REQ_ACTION_NAME: action_name.decode("utf-8"),
+            gvars.REQ_INSTANCE_ID: instance_id.decode("utf-8") }})
 
  
 def _read_req() -> bool:
@@ -340,13 +313,13 @@ def _read_req() -> bool:
     while not ret:
         ret, req = th_local.cache_svc.read_from_server()
 
-    if ((len(req) != 1) or (list(req.keys())[0] != ACTION_REQUEST)):
-        report_error("Expect ACTION_REQUESTnt req: {} {}".format(len(req), req.keys()))
+    if ((len(req) != 1) or (list(req.keys())[0] != gvars.REQ_TYPE_ACTION)):
+        report_error("Expect ACTION_REQUEST req: {} {}".format(len(req), req.keys()))
         return False
 
-    d = req[ACTION_REQUEST]
-    if ((d["request_type"] != REQ_TYPE_SHUTDOWN) and
-            (d[REQ_ACTION_NAME] not in th_local.actions)):
+    d = req[gvars.REQ_TYPE_ACTION]
+    if ((d["request_type"] != gvars.REQ_TYPE_SHUTDOWN) and
+            (d[gvars.REQ_ACTION_NAME] not in th_local.actions)):
         report_error("unknown req/action {}".format(json.dumps(d)))
         return False
 
@@ -375,7 +348,7 @@ def clib_write_action_response(resp: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        ACTION_REQUEST: json.loads(resp.decode("utf-8"))
+        gvars.REQ_TYPE_ACTION: json.loads(resp.decode("utf-8"))
     return 0
 
 
@@ -432,7 +405,7 @@ def server_read_request(timeout:int = -1) -> bool, {}:
     if len(d) != 1:
         report_error("Internal error. Expected one key. ({})".format(json.dumps(d)))
         return False, {}
-    if list(d.keys()][0] != ACTION_REQUEST:
+    if list(d.keys()][0] != gvars.REQ_TYPE_ACTION:
         report_error("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(d)))
         return False
 
@@ -444,9 +417,9 @@ def server_write_request(data:{}) -> bool:
     # Write is broadcast to all instances
     # The instances filter out requests for their actions
     #
-    if ((len(data) != 1) or (list[data.keys()][0] != ACTION_REQUEST)):
+    if ((len(data) != 1) or (list[data.keys()][0] != gvars.REQ_TYPE_ACTION)):
         report_error("Expect key {} with JSON object of the req as val: {}".
-                format(ACTION_REQUEST, json.dumps(data)))
+                format(gvars.REQ_TYPE_ACTION, json.dumps(data)))
         return False
 
     for _, svc in wr_fds:

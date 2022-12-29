@@ -8,7 +8,7 @@
             "actions_config_name": "actions_conf.json",
             "actions_binding_config_name": "actions_binding.json"
         }
-    }
+    },
     "test_cases": {
         "test-0": {
             "_description": [
@@ -48,10 +48,10 @@
                     },
                     "action_pause": 8
                 }
-            }
+            },
             "procs_config": {
                 "_description": [
-                    "Proc name must end in "_" followed by unique number",
+                    "Proc name must end in '_' followed by unique number",
                     "This is needed to use test_client lib"
                 ],
                 "proc_0": {
@@ -59,10 +59,10 @@
                     "test-0-action-1": "test_action.py",
                     "test-0-action-2": "test_action.py"
                 }
-            }
+            },
             "bindings_config": {
                 "test-0-action-0": [ "test-0-action-1", "test-0-action-2"]
-            }
+            },
             "test_plugin_data": {
                 "_description":  [
                     "Test data for test plugins. Optional",
@@ -106,7 +106,7 @@
                     "key: instance id as string. Default: computed",
                     "Value:",
                     "   timeout = <timeout for anomaly to return. Base it off pause.",
-                    "               <= 0 no timeout; > 0 timeout in seconds
+                    "               <= 0 no timeout; > 0 timeout in seconds",
                     "               Default: No timeout",
                     "               Required for test action. Don't provide for real action",
                     "   instance_id -- Instance ID to use for anomaly. Default: computed",
@@ -126,15 +126,13 @@
                             "test-0-action-0": {
                                 "instance_id": "id_test_0_action_0",
                                 "timeout": 10,
-                                "action_data": "",
+                                "action_data": ""
                             },
                             "test-0-action-1": {
                                 "instance-id": "id_test_0_action_1",
                                 "timeout": 5,
-                                "action_data": None
+                                "action_data": "",
                                 "context": ""
-                                "result_code": None,
-                                "result_str": None
                             },
                             "test-0-action-2": {
                                 "instance-id": "id_test_0_action_2",

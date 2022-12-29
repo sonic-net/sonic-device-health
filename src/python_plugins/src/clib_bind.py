@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 from common.py import *
+import gvar
 
 # *******************************
 # c-bindings related info
@@ -63,11 +64,8 @@ def c_lib_init(fl: str) -> bool:
             _clib_poll_for_data.argtypes = [ POINTER(c_int), c_int, c_int ]
             _clib_poll_for_data.restype = c_int
 
-            for i in [ "REQ_TYPE", "REQ_TYPE_ACTION", "REQ_TYPE_SHUTDOWN",
-                    "REQ_ACTION_NAME", "REQ_INSTANCE_ID", "REQ_CONTEXT",
-                    "REQ_TIMEOUT", "REQ_ACTION_DATA", "REQ_RESULT_CODE",
-                    "REQ_RESULT_STR", "REQ_HEARTBEAT_INTERVAL"]:
-                globals[i] = _get_str_globals(i)
+            # Update values in gvars.py
+            _update_globals()
 
         except Exception as e:
             log_error("Failed to load functions from CDLL {} err: {}".format(fl, str(e)))
@@ -145,33 +143,34 @@ def touch_heartbeat(action: str, instance_id: str) -> bool:
 
 
 # CLIB globals
-def _get_str_globals(name:str) -> str:
+def _get_str_clib_globals(name:str) -> str:
     return (c_char_p.in_dll(_clib_dll, name)).value.decode("utf-8")
 
 
-REQ_TYPE = _get_str_globals("REQ_TYPE")
-REQ_TYPE_ACTION = _get_str_globals("REQ_TYPE_ACTION")
-REQ_TYPE_SHUTDOWN = _get_str_globals("REQ_TYPE_SHUTDOWN")
+def _update_globals():
+    gvars.REQ_TYPE = _get_str_clib_globals("REQ_TYPE")
+    gvars.REQ_TYPE_ACTION = _get_str_clib_globals("REQ_TYPE_ACTION")
+    gvars.REQ_TYPE_SHUTDOWN = _get_str_clib_globals("REQ_TYPE_SHUTDOWN")
 
-REQ_ACTION_NAME = _get_str_globals("REQ_ACTION_NAME")
-REQ_INSTANCE_ID = _get_str_globals("REQ_INSTANCE_ID")
-REQ_CONTEXT = _get_str_globals("REQ_CONTEXT")
-REQ_TIMEOUT = _get_str_globals("REQ_TIMEOUT")
-REQ_ACTION_DATA = _get_str_globals("REQ_ACTION_DATA")
-REQ_RESULT_CODE = _get_str_globals("REQ_RESULT_CODE")
-REQ_RESULT_STR  = _get_str_globals("REQ_RESULT_STR")
+    gvars.REQ_ACTION_NAME = _get_str_clib_globals("REQ_ACTION_NAME")
+    gvars.REQ_INSTANCE_ID = _get_str_clib_globals("REQ_INSTANCE_ID")
+    gvars.REQ_CONTEXT = _get_str_clib_globals("REQ_CONTEXT")
+    gvars.REQ_TIMEOUT = _get_str_clib_globals("REQ_TIMEOUT")
+    gvars.REQ_ACTION_DATA = _get_str_clib_globals("REQ_ACTION_DATA")
+    gvars.REQ_RESULT_CODE = _get_str_clib_globals("REQ_RESULT_CODE")
+    gvars.REQ_RESULT_STR  = _get_str_clib_globals("REQ_RESULT_STR")
 
 class ActionRequest:
     def __init__(sdata: str):
         data = json.loads(sdata)
-        self.type = data[REQ_TYPE]
-        self.action_name = data[REQ_ACTION_NAME]
-        self.instance_id = data[REQ_INSTANCE_ID]
-        self.context = data[REQ_CONTEXT]
-        self.timeout = data[REQ_TIMEOUT]
+        self.type = data[gvars.REQ_TYPE]
+        self.action_name = data[gvars.REQ_ACTION_NAME]
+        self.instance_id = data[gvars.REQ_INSTANCE_ID]
+        self.context = data[gvars.REQ_CONTEXT]
+        self.timeout = data[gvars.REQ_TIMEOUT]
 
     def is_shutdown(self) -> bool:
-        return self.type == REQ_TYPE_SHUTDOWN
+        return self.type == gvars.REQ_TYPE_SHUTDOWN
 
 
 def read_action_request() -> bool, ActionRequest:
@@ -197,11 +196,11 @@ class ActionResponse:
             result_code:int,
             result_str:st) :
         self.data = json.dumps({
-                REQ_ACTION_NAME: action_name,
-                REQ_INSTANCE_ID: instance_id,
-                REQ_ACTION_DATA: action_data,
-                REQ_RESULT_CODE: result_code,
-                REQ_RESULT_STR : result_str })
+                gvars.REQ_ACTION_NAME: action_name,
+                gvars.REQ_INSTANCE_ID: instance_id,
+                gvars.REQ_ACTION_DATA: action_data,
+                gvars.REQ_RESULT_CODE: result_code,
+                gvars.REQ_RESULT_STR : result_str })
 
                 
     def value(self): -> str:
