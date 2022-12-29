@@ -1,10 +1,13 @@
 #! /usr/bin/env python3
 
+import json
 import os
 import sys
+import argparse
 
 _CT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(_CT_DIR, "..", "src")
+sys.path.append(os.path.join(_CT_DIR, "..", "src"))
+sys.path.append(os.path.join(_CT_DIR, "lib"))
 
 import gvars
 
@@ -16,7 +19,7 @@ from common import *
 
 TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
-TEST_DATA = os.path.join(_CT_DIR, "test_data", "test_data.json")
+TEST_DATA_FILE = os.path.join(_CT_DIR, "test_data", "test_data.json")
 
 
 lst_procs = {}
@@ -24,6 +27,7 @@ lst_procs = {}
 def clean_dir(d):
     os.system("rm -rf {}".format(d))
     os.system("mkdir -p {}".format(d))
+    print("Clean dir {}".format(d))
     return
 
 
@@ -37,7 +41,7 @@ def run_proc(proc_name: str, rcfile: str):
     print("Returned from plugin_proc: proc={} rc={}".format(
         proc_name, rcfile))
 
-def load_procs(procs: [str], rcfile: str):
+def _load_procs(procs: [str], rcfile: str):
     for proc_name in procs:
         th = threading.Thread(target=run_proc, args=(proc_name, rcfile,))
         th.start()
@@ -47,8 +51,8 @@ def load_procs(procs: [str], rcfile: str):
 
 
 def write_conf(fl, d) -> {}:
-    data = { k:v for k, v in d.items() if k not startswith("_") }
-    with open(fl, w) as s:
+    data = { k:v for k, v in d.items() if not k.startswith("_") }
+    with open(fl, "w") as s:
         s.write(json.dumps(data, indent=4))
     return data
 
@@ -118,6 +122,7 @@ class AnomalyHandler:
             gvars.REQ_TIMEOUT: _get_inst_val(gvars.REQ_TIMEOUT)}})
         return
 
+
     def process(self, req:{}) -> bool:
         action_name = _get_ct_action_name()
         if req[REQ_ACTION_NAME] != action_name:
@@ -160,20 +165,18 @@ class AnomalyHandler:
         return self.done
 
 
-def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
+def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     global failed
 
     global_rc_data = {}
     failed = False
 
     global_rc_data = default_data.get("global_rc", {})
-    if "global_rc" in test_data:
+    if "global_rc" in testcase_data:
         # Overwrite provided keys from testcase.
         for k, v in test_data("global_rc").items():
             global_rc_data[k] = v
     
-    testcase_data = test_data[test_case]
-
     if ((not global_rc_data) or (not testcase_data)):
         print("Missing data global_rc={} testcase_data={} test_case={}".format(
             len(global_rc_data), len(testcase_data), test_case))
@@ -181,7 +184,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
 
     # Get & create running dir; clean it if pre-exists.
     #
-    cfg_dir = os.path.join(global_rc_data.get("config-running-path", TMP_DIR), test_case)
+    cfg_dir = os.path.join(global_rc_data.get("config_running_path", TMP_DIR), test_case)
     clean_dir(cfg_dir)
 
     global_rc_data["config_running_path"] = cfg_dir
@@ -204,7 +207,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
 
 
     if test_case.endswith("0"):
-        printf("Terminating early")
+        print("Terminating early")
         return
 
     # Set test plugins data in globals
@@ -223,9 +226,9 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
 
     for path in testcase_data["plugin_paths"]:
         # path can be absolute or relative to this filepath.
-        syspath_append(os.path.join(_CT_DIR, path)
+        syspath_append(os.path.join(_CT_DIR, path))
 
-    load_procs(test_data["procs_config"].keys(), global_rc_file)
+    _load_procs(list(testcase_data["procs_config"].keys()), global_rc_file)
 
     # All procs are loaded in dedicated threads.
     # They would have
@@ -266,7 +269,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
             cl_name, action_name = parse_reg_action(data)
             if cl_name in reg_conf:
                 report_error("Server: register action:{} for missing client:{}".
-                        format(cl_name, action_name))
+                        format(cl_name, action_name),
                         format(cl_name))
                 break
             lst = reg_conf[cl_name]
@@ -299,7 +302,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
     # Test run on actions
 
     test_input = testcase_data.get("test-main-run", {}).get("input", {})
-    test_run_conf = { k:v for k, v in test_input.items() if k not startswith("_") }
+    test_run_conf = { k:v for k, v in test_input.items() if not k.startswith("_") }
 
     test_anomalies = {}
     for anomaly_action, v in test_run_conf.items():
@@ -317,7 +320,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
             ret, req = test_client.server_read_request()
             if not ret:
                 print("Error failed to read. Read again")
-            elif list(req.keys()][0] != ACTION_REQUEST:
+            elif list(req.keys()[0] != ACTION_REQUEST):
                 print("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(req)))
                 ret = False
             elif (req[ACTION_REQUEST][gvars.REQ_TYPE] !=
@@ -369,7 +372,7 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
 
 
 def main():
-    globals TMP_DIR
+    global TMP_DIR
 
     parser=argparse.ArgumentParser(description="Main test code")
     parser.add_argument("-p", "--path", default=TMP_DIR, help="test runtime path")
@@ -380,25 +383,29 @@ def main():
 
     test_data = {}
     default_data = {}
-    with open(TEST_DATA, "r") as s:
+    with open(TEST_DATA_FILE, "r") as s:
         d = json.load(s)
         test_data = d.get("test_cases", None)
         default_data = d.get("default", None)
 
-    if (not test_data) or (args.testcase not in test_data) or (not default_data):
+    if ((not test_data) or (not default_data) or 
+            (args.testcase and (args.testcase not in test_data))):
         print("Unable to find testcase ({}) in {}".format(
-            args.test_case, TEST_DATA))
+            args.testcase, list(test_data.keys())))
         return
 
     test_cases = []
     if args.testcase:
         test_cases.append(args.testcase)
     else:
-        test_cases = list(test_data["test_cases"].keys)
+        test_cases = list(test_data.keys())
 
     for k in test_cases:
         print("**************** Running   testcase: {} ****************".format(k))
-        run_a_testcase(k, test_data, default_data)
+        run_a_testcase(k, test_data[k], default_data)
         print("**************** Completed testcase: {} ****************".format(k))
 
+
+if __name__ == "__main__":
+    main()
 

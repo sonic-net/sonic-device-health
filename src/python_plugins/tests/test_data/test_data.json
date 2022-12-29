@@ -1,8 +1,8 @@
 {
     "default": {
         "global_rc": {
-            "config-running-path":  "/tmp",
-            "config-static-path":  ".,/config/",
+            "config_running_path":  "/tmp",
+            "config_static_path":  ".,/config/",
             "global_rc_name":  "globals.rc.json",
             "proc_plugins_conf_name":  "proc_plugins.json",
             "actions_config_name": "actions_conf.json",
@@ -17,12 +17,12 @@
                 "from plugins dir under tests"
             ],
             "plugin_paths": [],
-            "actions-config": {
+            "actions_config": {
                 "_description": [
                    "Action names should start with alpha [a-z]"
                 ], 
                 "test-0-action-0": {
-                    "action-name": "test-0-action-0",
+                    "action_name": "test-0-action-0",
                     "heartbeat_interval": 2,
                     "action_data": {
                         "foo": "foo_0",
@@ -31,7 +31,7 @@
                     "action_pause": 6
                 },
                 "test-0-action-1": {
-                    "action-name": "test-0-action-1",
+                    "action_name": "test-0-action-1",
                     "heartbeat_interval": 2,
                     "action_data": {
                         "bar": "foo_1",
@@ -40,7 +40,7 @@
                     "action_pause": 0
                 },
                 "test-0-action-2": {
-                    "action-name": "test-0-action-0",
+                    "action_name": "test-0-action-0",
                     "heartbeat_interval": 2,
                     "action_data": {
                         "hello": "world",
@@ -129,13 +129,13 @@
                                 "action_data": ""
                             },
                             "test-0-action-1": {
-                                "instance-id": "id_test_0_action_1",
+                                "instance_id": "id_test_0_action_1",
                                 "timeout": 5,
                                 "action_data": "",
                                 "context": ""
                             },
                             "test-0-action-2": {
-                                "instance-id": "id_test_0_action_2",
+                                "instance_id": "id_test_0_action_2",
                                 "timeout": 6,
                                 "action_data": ""
                             }

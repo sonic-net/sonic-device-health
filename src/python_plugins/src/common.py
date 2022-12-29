@@ -142,7 +142,7 @@ def is_running_config_available() -> bool:
             get_actions_conf_file() and
             get_actions_binding_conf_file()):
         return True
-    else
+    else:
         return False
 
         

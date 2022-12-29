@@ -48,7 +48,7 @@ from common import *
 # Create this just once and use
 # Each thread transparently gets its own copy
 #
-th_local = threading.local(()
+th_local = threading.local()
 
 CACHE_LIMIT = 10
 
@@ -63,7 +63,7 @@ def report_error(errMsg: str):
 # state and data buffer.
 #
 class CacheData:
-    def __init__(self, limit:ina, c2s:bool):
+    def __init__(self, limit:int, c2s:bool):
         self.limit = limit
         self.rd_index = 0
         self.wr_index = 0
@@ -74,15 +74,15 @@ class CacheData:
         self.signal_rd, self.signal_wr = os.pipe()
 
 
-    def get_signal_rd_fd() -> int:
+    def get_signal_rd_fd(self) -> int:
         return self.signal_rd
 
 
-    def get_signal_wr_fd() -> int:
+    def get_signal_wr_fd(self) -> int:
         return self.signal_wr
 
 
-    def _drain_signal():
+    def _drain_signal(self):
         while True:
             r, _, _ = select.select([self.signal_rd], [], [], 0)
             if self.signal_rd in r:
@@ -91,25 +91,25 @@ class CacheData:
                 break
 
 
-    def _raise_signal():
+    def _raise_signal(self):
         os.write(self.signal_wr, b"data")
 
 
     def write(self, data: {}) -> bool:
         # Test code never going to rollover. So ignore cnt rollover possibility.
         #
-        if (self.wr_cnt - self.rd_cnt) < self.limit:
-            self.data[self.wr_index] = data
-            self.wr_index += 1
-            if self.wr_index >= self.limit:
-                self.wr_index = 0
-            self.wr_cnt += 1
-            _raise_signal()
-            return True
-       else:
-           log_error("c2s:{} write overflow. dropped {}/{}".format(
-               self.c2s, self.wr_cnt, self.rd_cnt))
-           return False
+        if (self.wr_cnt - self.rd_cnt) >= self.limit:
+            log_error("c2s:{} write overflow. dropped {}/{}".format(
+                self.c2s, self.wr_cnt, self.rd_cnt))
+            return False
+
+        self.data[self.wr_index] = data
+        self.wr_index += 1
+        if self.wr_index >= self.limit:
+            self.wr_index = 0
+        self.wr_cnt += 1
+        _raise_signal()
+        return True
 
 
     # read with optional timeout.
@@ -118,8 +118,8 @@ class CacheData:
     #  <0 -- Block until data is available for read
     #  >0 -- Wait for these many seconds for data
     # 
-    def read(self, timeout=-1) -> bool, {}:
-        while (!shutdown and (timeout != 0) && (self.rd_cnt >= self.wr_cnt)):
+    def read(self, timeout=-1) -> (bool, {}):
+        while ((not shutdown) and (timeout != 0) and (self.rd_cnt >= self.wr_cnt)):
             t = 2
             if (timeout > 0):
                 if (timeout < t):
@@ -135,7 +135,7 @@ class CacheData:
         if self.rd_cnt < self.wr_cnt:
             # copy as other thread could write, upon rd_cnt incremented.
             #
-            ret = ( k:v for k, v in self.data[self.rd_index])
+            ret = { k:v for k, v in self.data[self.rd_index]}
             self.rd_index += 1
             if self.rd_index >= self.limit:
                 self.rd_index = 0
@@ -144,14 +144,14 @@ class CacheData:
         else:
             log_error("c2s:{} read empty. {}/{}".format(
                 self.c2s, self.wr_cnt, self.rd_cnt))
-            return False
+            return False, {}
 
 
 class cache_service:
     def __init__(self, limit:int=CACHE_LIMIT):
         # Get cache for both directions
-        self.c2s = CacheData()
-        self.s2c = CacheData()
+        self.c2s = CacheData(limit, True)
+        self.s2c = CacheData(limit, False)
 
 
     def write_to_server(self, d: {}) -> bool:
@@ -160,20 +160,20 @@ class cache_service:
     def write_to_client(self, d: {}) -> bool:
         return self.s2c.write(d)
 
-    def read_from_server(self, timeout:int = -1) -> bool, {}:
+    def read_from_server(self, timeout:int = -1) -> (bool, {}):
         return self.s2c.read(timeout)
 
-    def read_from_client(self, timeout:int = -1) -> bool, {}:
+    def read_from_client(self, timeout:int = -1) -> (bool, {}):
         return self.c2s.read(timeout)
 
-    def get_signal_rd_fd(is_c2s:bool) -> int:
+    def get_signal_rd_fd(self, is_c2s:bool) -> int:
         if is_c2s:
             return self.c2s.get_signal_rd_fd()
         else:
             return self.s2c.get_signal_rd_fd()
 
 
-    def get_signal_wr_fd(is_c2s:bool) -> int:
+    def get_signal_wr_fd(self, is_c2s:bool) -> int:
         if is_c2s:
             return self.c2s.get_signal_wr_fd()
         else:
@@ -197,11 +197,12 @@ def create_cache_services(cnt:int):
     global cache_services
     global rd_fds, wr_fds
 
-    cache_services = cache_service[cnt]
+    cache_services = [cache_service() for i in range(cnt)]
+
     for i in range(cnt):
         p = cache_services[i]
-        rd_fds[p.get_signal_rd_fd(true)] = p
-        wr_fds[p.get_signal_wr_fd(false)] = p
+        rd_fds[p.get_signal_rd_fd(True)] = p
+        wr_fds[p.get_signal_wr_fd(False)] = p
 
 
 test_error_code = 0
@@ -211,13 +212,12 @@ test_error_str = ""
 #
 # Mocked clib client calls
 #
-def reset_error():en(r) > 0:
-    break
-
+def reset_error():
     global error_code, error_str
 
     error_code = 0
     error_str = ""
+
 
 def clib_get_last_error() -> int:
     return error_code
@@ -252,7 +252,7 @@ def clib_register_client(cl_name: bytes) -> int:
     th_local.cache_svc.write_to_server({
         gvars.REQ_REGISTER_CLIENT: {
             gvars.REQ_CLIENT_NAME: cl_name.decode("utf-8") }})
-        return
+    return
 
 
 def clib_deregister_client(cl_name: bytes) -> int:
@@ -348,7 +348,7 @@ def clib_write_action_response(resp: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        gvars.REQ_TYPE_ACTION: json.loads(resp.decode("utf-8"))
+        gvars.REQ_TYPE_ACTION: json.loads(resp.decode("utf-8"))})
     return 0
 
 
@@ -395,7 +395,7 @@ def clib_poll_for_data(fds, cnt:int, timeout: int) -> int:
 # of clib wrappers as server writes are read by clib mock and 
 # vice versa
 
-def server_read_request(timeout:int = -1) -> bool, {}:
+def server_read_request(timeout:int = -1) -> (bool, {}):
     lst = list(rd_fds.keys())
     r = _poll(lst, timeout)
 
@@ -405,7 +405,7 @@ def server_read_request(timeout:int = -1) -> bool, {}:
     if len(d) != 1:
         report_error("Internal error. Expected one key. ({})".format(json.dumps(d)))
         return False, {}
-    if list(d.keys()][0] != gvars.REQ_TYPE_ACTION:
+    if list(d.keys())[0] != gvars.REQ_TYPE_ACTION:
         report_error("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(d)))
         return False
 
@@ -431,12 +431,11 @@ def parse_reg_client(data: {}) -> str :
     return data[ATTR_CLIENT_NAME]
 
 
-def parse_reg_action(data: {}) -> str, str :
+def parse_reg_action(data: {}) -> (str, str):
     return data[ATTR_CLIENT_NAME], data[ATTR_ACTION_NAME]
 
 
-def parse_heartbeat(data: {}) -> str, str, str :
+def parse_heartbeat(data: {}) -> (str, str, str):
     return (data[ATTR_CLIENT_NAME], 
             data[ATTR_ACTION_NAME], data[ATTR_INSTANCE_ID])
 
-def parse_
