@@ -8,8 +8,7 @@ import gvar
 # *******************************
 #
 
-test_run = os.getenv("TESTMODE") != None
-if test_run:
+if gvars.TEST_RUN:
     import test_client
     log_debug("Running in test mode")
 
@@ -20,7 +19,7 @@ _clib_dll = None
 def c_lib_init(fl: str) -> bool:
     global _clib_dll
 
-    if not test_run:
+    if not gvars.TEST_RUN:
         try:
             _clib_dll = ctypes.CDLL(fl)
         except OSError as e:
@@ -89,7 +88,7 @@ def c_lib_init(fl: str) -> bool:
 def validate_dll():
     if not _clib_dll:
         log_error("CLib is not loaded. Failed.")
-        return test_run
+        return gvars.TEST_RUN
     return True
 
 

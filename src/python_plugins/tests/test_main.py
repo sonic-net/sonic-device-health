@@ -2,15 +2,17 @@
 
 import os
 import sys
+
+_CT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(_CT_DIR, "..", "src")
+
+import gvars
+
+gvars.TEST_RUN = True
 import test_client
 from test_client import report_error
 
-_CT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-sys.path.append(_CT_DIR, "..", "src")
-
 from common import *
-import gvars
 
 TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
@@ -200,6 +202,10 @@ def run_a_testcase(test_case:str, test_data:{}, default_data:{}):
     with open(global_rc_file, "w") as s:
         s.write(json.dumps(global_rc_data, indent=4))
 
+
+    if test_case.endswith("0"):
+        printf("Terminating early")
+        return
 
     # Set test plugins data in globals
     # As plugins are loaded by another thread in the same process

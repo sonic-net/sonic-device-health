@@ -35,3 +35,5 @@ REQ_ACTION_DATA = "action_data"
 REQ_RESULT_CODE = "result_code"
 REQ_RESULT_STR = "result_str"
 
+# run type
+TEST_RUN = False
