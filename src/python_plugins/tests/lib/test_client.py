@@ -264,7 +264,7 @@ def clib_register_client(cl_name: bytes) -> int:
     log_info("Registered:{} taken service index {}".
             format(cl_name, index))
     th_local.cache_svc = cache_services[index]
-    th_local.cl_name = cl_name
+    th_local.cl_name = cl_name.decode("utf-8")
     th_local.actions = []
 
     th_local.cache_svc.write_to_server({
@@ -295,14 +295,15 @@ def clib_register_action(action_name: bytes) -> int:
         report_error("register_action: client not registered {}".format(action_name))
         return -1
 
-    if action_name in th_local.actions:
-        report_error("Duplicate registration {}".format(actrion_name))
+    act_name = action_name.decode("utf-8")
+    if act_name in th_local.actions:
+        report_error("Duplicate registration {}".format(act_name))
         return -2
 
-    th_local.actions.append(action_name)
+    th_local.actions.append(act_name)
     th_local.cache_svc.write_to_server({
         gvars.REQ_REGISTER_ACTION: {
-            gvars.REQ_ACTION_NAME: action_name.decode("utf-8"),
+            gvars.REQ_ACTION_NAME: act_name,
             gvars.REQ_CLIENT_NAME: th_local.cl_name }})
     return 0
 
@@ -421,7 +422,6 @@ def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
 
 def server_read_request(timeout:int = -1) -> (bool, {}):
     lst = list(rd_fds.keys())
-    log_debug("********** rd_fds:{} ********".format(rd_fds.keys()))
     r = _poll(lst, timeout)
 
     ret, d = rd_fds[r[0]].read_from_client()

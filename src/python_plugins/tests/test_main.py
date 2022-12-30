@@ -171,7 +171,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     global failed
 
     global_rc_data = {}
-    failed = False
 
     global_rc_data = default_data.get("global_rc", {})
     if "global_rc" in testcase_data:
@@ -251,7 +250,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     reg_conf = {}
     while rcnt > 0:
         ret, data = test_client.server_read_request()
-        log_debug("Read ret={} req={}".format(ret, json.dumps(data)))
+        log_debug("Read ret={} req={}".format(ret, data))
         if not ret:
             report_error("Server: Pending registrations: Failed to read")
             break
@@ -269,11 +268,10 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             rcnt -= 1
 
         elif key == gvars.REQ_REGISTER_ACTION:
-            cl_name, action_name = test_client.parse_reg_action(data)
-            if cl_name in reg_conf:
+            cl_name, action_name = test_client.parse_reg_action(val)
+            if cl_name not in reg_conf:
                 report_error("Server: register action:{} for missing client:{}".
-                        format(cl_name, action_name),
-                        format(cl_name))
+                        format(cl_name, action_name))
                 break
             lst = reg_conf[cl_name]
             if action_name in lst:
@@ -286,9 +284,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             report_error("server: In middle of vetting registration cnt={} req={}"
                     .format(rcnt, json.dumps(data, indent=4)))
             break
-
-    if failed:
-        return
 
     if set(reg_conf.keys()) != set(procs_conf.keys()):
         report_error("server: proc registered={} != expected={}".format(
