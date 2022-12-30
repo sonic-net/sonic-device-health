@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 import importlib
 
 _CT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,39 +67,40 @@ class AnomalyHandler:
         self.test_instances = action_inp["instances"]
         self.test_instance_index = 0
         self.test_inst = None
-        self.done = False
+        self.run_complete = False
         self.action_seq = [action_name] + bindings
         self.action_seq_index = 0
         self.instance_id_index = 0
         self.ct_instance_id = None
 
 
-    def _get_ct_action_name() -> str:
+    def _get_ct_action_name(self) -> str:
         return self.action_seq[self.action_seq_index]
 
 
-    def _get_inst_val(inst:{}, attr_name:str):
-        action_name = _get_ct_action_name()
+    def _get_inst_val(self, attr_name:str):
+        action_name = self._get_ct_action_name()
         val = self.test_inst.get(action_name, {}).get(attr_name, None)
         if val != None:
             return val
 
         if attr_name == "run_cnt":
             return 1
-        if attr_name == REQ_INSTANCE_ID:
+        if attr_name == gvars.REQ_INSTANCE_ID:
             idx = self.instance_id_index
             self.instance_id_index += 1
             return "id_{}_run_{}_idx_{}".format(self.action_seq[0],
-                    self.run_index, idx)
-        if attr_name == REQ_TIMEOUT:
+                    self.test_run_index, idx)
+        if attr_name == gvars.REQ_TIMEOUT:
             return 0        # No timeout
-        if attr_name in [REQ_ACTION_DATA, REQ_CONTEXT, REQ_RESULT_CODE, REQ_RESULT_STR]:
+        if attr_name in [gvars.REQ_ACTION_DATA, gvars.REQ_CONTEXT,
+                gvars.REQ_RESULT_CODE, gvars.REQ_RESULT_STR]:
             return None
         return None
 
 
     def start(self) -> bool:
-        if self.done:
+        if self.run_complete:
             return False
 
         # Each test instance run start from anomaly action. Reset seq to 0
@@ -110,61 +112,67 @@ class AnomalyHandler:
         if self.test_instance_index > len(self.test_instances):
             self.test_instance_index = 0
 
-        _write_request()
+        self._write_request()
+        return True
 
 
     def _write_request(self):
         # Send request to anomaly action
-        self.ct_instance_id = _get_inst_val(gvars.REQ_INSTANCE_ID)
-        server_write_request({ gvars.ACTION_REQUEST: {
+        self.ct_instance_id = self._get_inst_val(gvars.REQ_INSTANCE_ID)
+        test_client.server_write_request({ gvars.REQ_ACTION_REQUEST: {
             gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
-            gvars.REQ_ACTION_NAME: _get_ct_action_name(),
+            gvars.REQ_ACTION_NAME: self._get_ct_action_name(),
             gvars.REQ_INSTANCE_ID: self.ct_instance_id,
-            gvars.REQ_CONTEXT: _get_inst_val(gvars.REQ_CONTEXT),
-            gvars.REQ_TIMEOUT: _get_inst_val(gvars.REQ_TIMEOUT)}})
+            gvars.REQ_CONTEXT: self._get_inst_val(gvars.REQ_CONTEXT),
+            gvars.REQ_TIMEOUT: self._get_inst_val(gvars.REQ_TIMEOUT)}})
         return
 
 
-    def process(self, req:{}) -> bool:
-        action_name = _get_ct_action_name()
-        if req[REQ_ACTION_NAME] != action_name:
+    def process_plugin_response(self, req:{}) -> bool:
+        action_name = self._get_ct_action_name()
+        if req[gvars.REQ_ACTION_NAME] != action_name:
             log_debug("INFO: Skip mismathc Action {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
 
-        if req[REQ_INSTANCE_ID] != self.ct_instance_id:
+        if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
             log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
 
         test_act_data = self.test_inst.get(action_name, {})
         for attr in [gvars.REQ_ACTION_DATA, gvars.REQ_RESULT_CODE,
-                gvars.REQ_RESULT_Str]:
+                gvars.REQ_RESULT_STR]:
             val_expect = test_act_data.get(attr, None)
-            if val_expect != None:
+            if (val_expect != None) and (val_expect != ""):
                 if req[attr] != val_expect:
                     report_error("{}: mismatch attr:{} exp:{} != rcvd:{}".
                             format(action_name, attr, val_expect, req[attr]))
 
         # Are we done?
-        self.test_run_index += 1
-        if self.test_run_index >= self.test_run_cnt:
-            self.done = True
-            return True
-
-        # Are we done with binding sequence
         self.action_seq_index += 1
+
+        if self.action_seq_index >= len(self.action_seq):
+            # increment run index, as are done with binding sequence.
+            self.test_run_index += 1
+            if self.test_run_index >= self.test_run_cnt:
+                self.run_complete = True
+                log_info("Test run done for anomaly {} cnt: {}".
+                        format(self.action_seq[0], self.test_run_cnt))
+                return True
+
+        # Are we done with binding sequence ? If yes restart
         if self.action_seq_index >= len(self.action_seq):
             start()
             return True
 
         # Write request to next action in sequence
-        _write_request()
+        self._write_request()
         return True
 
 
     def done(self)->bool:
-        return self.done
+        return self.run_complete
 
 
 def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
@@ -299,46 +307,50 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     # all registrations arrived & verified.
     # Test run on actions
 
-    test_input = testcase_data.get("test-main-run", {}).get("input", {})
+    test_input = testcase_data.get("test-main-run", {})
     test_run_conf = { k:v for k, v in test_input.items() if not k.startswith("_") }
 
     test_anomalies = {}
     for anomaly_action, v in test_run_conf.items():
         test_anomalies[anomaly_action] = AnomalyHandler(
-                anomalty_action, v, bindings_conf[anomaly_action])
+                anomaly_action, v, bindings_conf[anomaly_action])
 
-    for k in test_anomalies:
-        if not k.start():
-            report_error("Failed to start anomaly {}".format(k))
+    for name, handler in test_anomalies.items():
+        if not handler.start():
+            report_error("Failed to start anomaly {}".format(name))
             return
 
     while test_anomalies:
         ret = False
         while not ret:
             ret, req = test_client.server_read_request()
+                ret, json.dumps(req)))
             if not ret:
                 log_debug("Error failed to read. Read again")
-            elif list(req.keys()[0] != ACTION_REQUEST):
-                log_debug("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(req)))
+            elif (list(req)[0] != gvars.REQ_ACTION_REQUEST):
+                log_debug("Internal error. Expected '{}': {}".format(
+                    gvars.REQ_ACTION_REQUEST, json.dumps(req)))
                 ret = False
-            elif (req[ACTION_REQUEST][gvars.REQ_TYPE] !=
+            elif (req[gvars.REQ_ACTION_REQUEST][gvars.REQ_TYPE] !=
                     gvars.REQ_TYPE_ACTION):
-                log_debug("Internal error. Expected only {} from client".format(json.dumps(req)))
+                log_debug("Internal error. Expected only {} from client {}".
+                        format(gvars.REQ_ACTION_REQUEST, json.dumps(req)))
                 ret = False
+                # clients ony send response 
 
         done = []
-        req_data = req[ACTION_REQUEST]
-
-        for k in test_anomalies:
-            if k.process(req_data):
+        req_data = req[gvars.REQ_ACTION_REQUEST]
+        
+        for name, handler in test_anomalies.items():
+            if handler.process_plugin_response(req_data):
                 log_debug("Processed read data")
-                if k.done():
-                    done.append(k)
+                if handler.done():
+                    done.append(name)
                 break
-        for k in done:
-            test_anomalies.pop(k, None)
+        for name in done:
+            test_anomalies.pop(name, None)
 
-    test_client.server_write_request({ACTION_REQUEST: {REQ_TYPE: REQ_TYPE_SHUTDOWN}})
+    test_client.server_write_request({gvars.REQ_ACTION_REQUEST: {gvars.REQ_TYPE: gvars.REQ_TYPE_SHUTDOWN}})
 
     # Wait for a max 5 seconds for all procs to exit
     tstart = int(time.time())
@@ -357,7 +369,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     #
     while True:
         leak = False
-        for proc, th in lst_procs:
+        for proc, th in lst_procs.items():
             if th.is_alive():
                 report_error("proc:{} not exiting for {} secs".
                         format(proc, int(time.time()) - tstart))
@@ -365,6 +377,9 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         if not leak:
             break
         time.sleep(1)
+
+    for proc, th in lst_procs.items():
+        th.join(0)
 
     return
 

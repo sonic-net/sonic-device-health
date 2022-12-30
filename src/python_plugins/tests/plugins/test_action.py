@@ -8,6 +8,7 @@
 import json
 import os
 import sys
+import time
 
 from common import *
 import test_client
@@ -48,7 +49,8 @@ class LoMPlugin:
 
 
     def request(self, req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
-        ret = clib_bind.ActionResponse (self.action_name, req.instance_id, _get_resp(), 0, "")
+        ret = clib_bind.ActionResponse (self.action_name, req.instance_id,
+                self._get_resp(), 0, "")
 
         if not self.valid:
             log_error("{}: Plugin is not valid. Failing request".format(action_name))
@@ -72,8 +74,8 @@ class LoMPlugin:
             
         else:
             pause = int(self.action_config.get(gvars.REQ_PAUSE, 3))
-            # hb_int = self.action_config.get(gvars.REQ_HEARTBEAT_INTERVAL, 1)
-            inst_id = self.req.instance_id
+            hb_int = self.action_config.get(gvars.REQ_HEARTBEAT_INTERVAL, 1)
+            inst_id = req.instance_id
 
             n = 0;
             while (not self.shutdown_done) and (n < pause):

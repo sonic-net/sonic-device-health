@@ -185,13 +185,15 @@ def _update_globals():
     gvars.REQ_RESULT_STR  = _get_str_clib_globals("REQ_RESULT_STR")
 
 class ActionRequest:
-    def __init__(sdata: str):
+    def __init__(self, sdata: str):
         data = json.loads(sdata)
         self.type = data[gvars.REQ_TYPE]
-        self.action_name = data[gvars.REQ_ACTION_NAME]
-        self.instance_id = data[gvars.REQ_INSTANCE_ID]
-        self.context = data[gvars.REQ_CONTEXT]
-        self.timeout = data[gvars.REQ_TIMEOUT]
+        if self.type == gvars.REQ_TYPE_ACTION:
+            self.action_name = data[gvars.REQ_ACTION_NAME]
+            self.instance_id = data[gvars.REQ_INSTANCE_ID]
+            self.context = data[gvars.REQ_CONTEXT]
+            self.timeout = data[gvars.REQ_TIMEOUT]
+
 
     def is_shutdown(self) -> bool:
         return self.type == gvars.REQ_TYPE_SHUTDOWN
@@ -214,13 +216,14 @@ def read_action_request() -> (bool, ActionRequest):
 
 
 class ActionResponse:
-    def __init__(action_name:str,
+    def __init__(self, action_name:str,
             instance_id:str,
             action_data: str,
             result_code:int,
             result_str:str) :
         self.data = json.dumps({
                 gvars.REQ_ACTION_NAME: action_name,
+                gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
                 gvars.REQ_INSTANCE_ID: instance_id,
                 gvars.REQ_ACTION_DATA: action_data,
                 gvars.REQ_RESULT_CODE: result_code,
@@ -236,7 +239,7 @@ def write_action_response(res: ActionResponse) -> bool:
         return False
 
     ret = _clib_write_action_response(
-            ActionResponse.value().encode("utf-8"))
+            res.value().encode("utf-8"))
 
     if ret != 0:
         log_error("write_action_response failed")

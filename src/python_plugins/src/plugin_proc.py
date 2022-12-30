@@ -4,6 +4,7 @@ import argparse
 import importlib
 import json
 import os
+import select
 import signal
 import sys
 import threading
@@ -131,14 +132,14 @@ class LoMPluginHolder:
                                 # Main thread call join and reset to None
         self.response = None    # Response returned by plugin for the request
                                 # Arrives via the req thread.
-        self.request = {}       # Last request sent to plugin
+        self.last_request = {}  # Last request sent to plugin
         self.req_start = 0      # Timestamp of request start.
-        self.req_end = 0        # Timestamp of request end.
         self.name = ""          # Name of the action handled by this plugin
         self.touch = None       # Last touch from plugin while running request
         self.touchSent = None   # Last touch that is sent
                                 # touch stores epoch seconds
-        self.plugin_timeout = False
+        self.plugin_timedout = False
+        self.action_pause = config.get(gvars.REQ_PAUSE, None)
 
         try:
             module = importlib.import_module(module_name)
@@ -178,10 +179,10 @@ class LoMPluginHolder:
         if not self.plugin:
             return False
 
-        if self.plugin_timeout:
+        if self.plugin_timedout:
             taken = time.time() - self.req_start
             log_error("{}:request is running for {} beyond timeout {} secs".format(
-                self.name, taken, self.request.timeout))
+                self.name, taken, self.last_request.timeout))
             return False
 
         return True
@@ -228,22 +229,32 @@ class LoMPluginHolder:
         return
 
 
+    def _drain_signal(self):
+        # reset the signal, if any
+        # Check before making blocking read, as it might have
+        # already got cleared. Read w/o data will block.
+        #
+        r, _, _ = select.select([self.fdR], [], [], 0)
+        if self.fdR in r:
+            os.read(self.fdR, 100)
+
+
     def _run_request(self):
         # Starting method of the request thread.
         # Running in a dedicated thread. So make a blocking call.
         #
-        self.response = self.plugin.request(self.request)
+        self.response = self.plugin.request(self.last_request)
 
         log_info("{}: Completed request".format(self.name))
 
         # Raise signal as last step.
-        _raise_signal()     # Inform the completion
+        self._raise_signal()     # Inform the completion
 
         # request thread terminates upon return.
         return
 
 
-    def chk_thread_done(self) -> bool:
+    def _chk_thread_done(self) -> bool:
         # Called from main thread to check on req thread if
         # completed or not.
         # Return false if running
@@ -253,7 +264,7 @@ class LoMPluginHolder:
         if self.thr:
             if self.thr.is_alive():
                 # Request thread has not completed yet.
-                if self.plugin_timeout:
+                if self.plugin_timedout:
                     taken = time.time() - self.req_start
                     log_error("{}:request running for {} > timeout{}".
                             format(self.name, take, self.request.timeout))
@@ -264,15 +275,7 @@ class LoMPluginHolder:
             self.thr.join(0)
             self.thr = None
 
-        self.plugin_timeout = False
-
-        # reset the signal, if any
-        # Check before making blocking read, as it might have
-        # already got cleared. Read w/o data will block.
-        #
-        r, _, _ = select.select([fdR], [], [], 0)
-        if fdR in r:
-            os.read(fdR, 100)
+        self.plugin_timedout = False
 
         return True
 
@@ -282,24 +285,26 @@ class LoMPluginHolder:
 
         # Called from main thread, upon receiving signal
         #
-        if not chk_thread_done():
+        if not self._chk_thread_done():
             log_error("{}: Internal error: thread is not done in handle_response".format(
                 self.name))
             return
+
+        self._drain_signal()
 
         # Write response to backend server/engine.
         #
         clib_bind.write_action_response(self.response)
 
         log_info("{}: request taken:{} process-pause:{}".format(
-            self.name, self.req_end - self.req_start, tnow - self.req_end))
+            self.name, time.time() - self.req_start, self.action_pause))
 
 
-    def request(self, req:clib_bind.ActionRequest):
+    def send_request(self, req:clib_bind.ActionRequest):
         # Called by main thread upon receiving request call to 
         # this plugin from the backend engine / server.
         #
-        if not chk_thread_done():
+        if not self._chk_thread_done():
             log_error("{}: request dropped as busy with previous".format(self.name))
             return
 
@@ -307,21 +312,20 @@ class LoMPluginHolder:
         #
         self.response = {}
         self.req_start = time.time()
-        self.req_end = 0
-        self.request = req
+        self.last_request = req
         self.thr = threading.Thread(target=self._run_request,
                 name="req_{}".format(self.name))
         self.thr.start()
 
         log_info("{}: request submitted".format(self.name))
 
-        if self.request.timeout > 0:
+        if self.last_request.timeout > 0:
             # Timed request;
             # Engine waits on timed request, hence no new request is expected.
             # Hence block until timeout or response, whichever earlier.
             #
             signal_rcvd = False
-            while int(time.time() - self.req_start) < self.request.timeout:
+            while int(time.time() - self.req_start) < self.last_request.timeout:
                 r, _, _ = select.select([fdR], [], [], ACTIVE_POLL_TIMEOUT)
                 if fdR in r:
                     signal_rcvd = True
@@ -331,7 +335,7 @@ class LoMPluginHolder:
             if signal_rcvd:
                 handle_response()
             else:
-                self.plugin_timeout = True
+                self.plugin_timedout = True
                 log_error("{}:request has and still timed out".format(self.name))
         return
 
@@ -342,27 +346,30 @@ class LoMPluginHolder:
 
 
 def handle_shutdown(active_plugin_holders: {}):
+    global shutdown_request
+
     for name, holder in active_plugin_holders.items():
         holder.shutdown()
         log_info("Requested shutdown of action {}".format(name))
+
+    shutdown_request = True
     return
 
 
 def handle_server_request(active_plugin_holders: {}):
+
     ret, req = clib_bind.read_action_request()
-    action_name = req.action_name
     if not ret:
         log_error("Failed to read server request upon poll") 
         return
 
     if req.is_shutdown():
-        shutdown_request = True
         handle_shutdown(active_plugin_holders)
 
-    elif action_name in active_plugin_holders:
-        plugin_holder = active_plugin_holders[action_name]
-        if not plugin_holder.is_valid():
-            plugin_holder.request(req)
+    elif req.action_name in active_plugin_holders:
+        plugin_holder = active_plugin_holders[req.action_name]
+        if plugin_holder.is_valid():
+            plugin_holder.send_request(req)
         else:
             log_error("{} is not in valid state to accept request".format(action_name))
     else:
@@ -429,7 +436,7 @@ def main_run(proc_name: str) -> int:
             if not ret in pipe_list:
                 log_error("INTERNAL ERROR: fd {} not in pipe list".format(ret))
             else:
-                handle_plugin_holder(pipe_list[ret])
+                handle_plugin_holder(active_plugin_holders[pipe_list[ret]])
         elif ret != -2:
             # This is unexepected return value
             break

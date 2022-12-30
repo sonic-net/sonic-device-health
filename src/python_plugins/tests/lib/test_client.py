@@ -266,6 +266,7 @@ def clib_register_client(cl_name: bytes) -> int:
     th_local.cache_svc = cache_services[index]
     th_local.cl_name = cl_name.decode("utf-8")
     th_local.actions = []
+    th_local.req = None
 
     th_local.cache_svc.write_to_server({
         gvars.REQ_REGISTER_CLIENT: {
@@ -286,6 +287,7 @@ def clib_deregister_client(cl_name: bytes) -> int:
     th_local.cache_svc = None
     th_local.cl_name = None
     th_local.actions = None
+    th_local.req = None
 
     return
 
@@ -329,14 +331,15 @@ def _read_req() -> bool:
         return True
 
     req = {}
+    ret = False
     while not ret:
         ret, req = th_local.cache_svc.read_from_server()
 
-    if ((len(req) != 1) or (list(req.keys())[0] != gvars.REQ_TYPE_ACTION)):
+    if ((len(req) != 1) or (list(req.keys())[0] != gvars.REQ_ACTION_REQUEST)):
         report_error("Expect ACTION_REQUEST req: {} {}".format(len(req), req.keys()))
         return False
 
-    d = req[gvars.REQ_TYPE_ACTION]
+    d = req[gvars.REQ_ACTION_REQUEST]
     if ((d["request_type"] != gvars.REQ_TYPE_SHUTDOWN) and
             (d[gvars.REQ_ACTION_NAME] not in th_local.actions)):
         report_error("unknown req/action {}".format(json.dumps(d)))
@@ -356,7 +359,7 @@ def clib_read_action_request() -> bytes:
     while not ret:
         ret = _read_req()
 
-    req = json.dumps(th_local.req).encode("utf-8")
+    req = json.dumps(th_local.req[gvars.REQ_ACTION_REQUEST]).encode("utf-8")
     th_local.req = None
     return req
 
@@ -367,7 +370,7 @@ def clib_write_action_response(resp: bytes) -> int:
         return
 
     th_local.cache_svc.write_to_server({
-        gvars.REQ_TYPE_ACTION: json.loads(resp.decode("utf-8"))})
+        gvars.REQ_ACTION_REQUEST: json.loads(resp.decode("utf-8"))})
     return 0
 
 
@@ -443,7 +446,7 @@ def server_write_request(data:{}) -> bool:
     # Write is broadcast to all instances
     # The instances filter out requests for their actions
     #
-    if ((len(data) != 1) or (list[data.keys()][0] != gvars.REQ_TYPE_ACTION)):
+    if ((len(data) != 1) or (list(data)[0] != gvars.REQ_ACTION_REQUEST)):
         report_error("Expect key {} with JSON object of the req as val: {}".
                 format(gvars.REQ_TYPE_ACTION, json.dumps(data)))
         return False
