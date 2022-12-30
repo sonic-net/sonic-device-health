@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import sys
+import threading
 import time
 
 import clib_bind
@@ -308,7 +309,8 @@ class LoMPluginHolder:
         self.req_start = time.time()
         self.req_end = 0
         self.request = req
-        self.thr = threading.Thread(target=self._run_request)
+        self.thr = threading.Thread(target=self._run_request,
+                name="req_{}".format(self.name))
         self.thr.start()
 
         log_info("{}: request submitted".format(self.name))
@@ -393,7 +395,6 @@ def main_run(proc_name: str) -> int:
 
     try:
         for name, path in plugins.items():
-            print("------------ name:{} path:{} ------------".format(name,  path))
             conf = actions_conf.get(name, {})
             disabled = conf.get("disable", False)
             if not disabled:
@@ -406,7 +407,6 @@ def main_run(proc_name: str) -> int:
                         name, path))
                     return -1
 
-                print("one plugin DONE")
                 active_plugin_holders[name] = pluginHolder
                 pipe_list[fdR] = name
             else:
@@ -453,13 +453,13 @@ def main(proc_name, global_rc_file):
     for p in syspaths:
         rp = os.path.join(_CT_DIR, p)
         syspath_append(rp)
-        print("Registered sys {}".format(rp))
 
     syslog_init(proc_name)
 
-    signal.signal(signal.SIGHUP, signal_handler)
-    signal.signal(signal.SIGUSR1, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGHUP, signal_handler)
+        signal.signal(signal.SIGUSR1, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
     if not clib_bind.c_lib_init():
         log_error("Failed to init CLIB")
@@ -487,8 +487,6 @@ if __name__ == "__main__":
 
     if args.test:
         set_test_mode()
-
-    print("rc={}".format(args.global_rc))
 
     main(args.proc_name, args.global_rc)
 

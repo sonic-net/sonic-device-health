@@ -31,6 +31,9 @@ def c_lib_init() -> bool:
     global _clib_deregister_client, _clib_register_action, _clib_touch_heartbeat
     global _clib_read_action_request, _clib_write_action_response, _clib_poll_for_data
 
+    if _clib_dll:
+        log_debug("Already initialized")
+        return True
 
     if not gvars.TEST_RUN:
         try:

@@ -31,7 +31,7 @@ class LoMPlugin:
         self.hb_callback = fn_hb
         self.shutdown_done = False
         self.req_idx = 0
-        print("test_action.py: LoMPlugin created for {}".format(self.action_name))
+        log_debug("test_action.py: LoMPlugin created for {}".format(self.action_name))
         
 
     def getName(self) -> str:

@@ -131,12 +131,12 @@ class CacheData:
             if self.signal_rd in r:
                 break
 
-        _drain_signal()
+        self._drain_signal()
 
         if self.rd_cnt < self.wr_cnt:
             # copy as other thread could write, upon rd_cnt incremented.
             #
-            ret = { k:v for k, v in self.data[self.rd_index]}
+            ret = { k:v for k, v in self.data[self.rd_index].items()}
             self.rd_index += 1
             if self.rd_index >= self.limit:
                 self.rd_index = 0
@@ -421,6 +421,7 @@ def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
 
 def server_read_request(timeout:int = -1) -> (bool, {}):
     lst = list(rd_fds.keys())
+    log_debug("********** rd_fds:{} ********".format(rd_fds.keys()))
     r = _poll(lst, timeout)
 
     ret, d = rd_fds[r[0]].read_from_client()
@@ -429,9 +430,10 @@ def server_read_request(timeout:int = -1) -> (bool, {}):
     if len(d) != 1:
         report_error("Internal error. Expected one key. ({})".format(json.dumps(d)))
         return False, {}
-    if list(d.keys())[0] != gvars.REQ_TYPE_ACTION:
-        report_error("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(d)))
-        return False
+    if list(d.keys())[0] not in [ gvars.REQ_REGISTER_CLIENT, gvars.REQ_DEREGISTER_CLIENT,
+            gvars.REQ_REGISTER_ACTION, gvars.REQ_HEARTBEAT, gvars.REQ_ACTION_REQUEST]:
+        report_error("Internal error. Unexpected request: {}".format(json.dumps(d)))
+        return False, {}
 
     return True, d
 
@@ -446,20 +448,20 @@ def server_write_request(data:{}) -> bool:
                 format(gvars.REQ_TYPE_ACTION, json.dumps(data)))
         return False
 
-    for _, svc in wr_fds:
+    for _, svc in wr_fds.items():
         svc.write_to_client(data)
     return True
 
 
 def parse_reg_client(data: {}) -> str :
-    return data[ATTR_CLIENT_NAME]
+    return data[gvars.REQ_CLIENT_NAME]
 
 
 def parse_reg_action(data: {}) -> (str, str):
-    return data[ATTR_CLIENT_NAME], data[ATTR_ACTION_NAME]
+    return data[gvars.REQ_CLIENT_NAME], data[gvars.REQ_ACTION_NAME]
 
 
 def parse_heartbeat(data: {}) -> (str, str, str):
-    return (data[ATTR_CLIENT_NAME], 
-            data[ATTR_ACTION_NAME], data[ATTR_INSTANCE_ID])
+    return (data[gvars.REQ_CLIENT_NAME], 
+            data[gvars.REQ_ACTION_NAME], data[gvars.REQ_INSTANCE_ID])
 

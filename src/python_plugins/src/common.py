@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import syslog
+from threading import current_thread
 from typing import NamedTuple
 
 import gvars
@@ -50,7 +51,7 @@ _lvl_to_str = [
 
 def _log_write(lvl: int, msg:str):
     syslog.syslog(lvl, msg)
-    print("Log({}): {}".format(_lvl_to_str[lvl], msg))
+    print("{}:{}: {}".format(current_thread().name, _lvl_to_str[lvl], msg))
 
 
 def log_error(msg:str):
@@ -85,9 +86,10 @@ def log_debug(msg:str):
 _global_rc_data = {}
 
 def set_global_rc_file(fl:str):
-    global GLOBAL_RC_FILE
+    global GLOBAL_RC_FILE, _global_rc_data
 
     GLOBAL_RC_FILE = fl
+    _global_rc_data = {}
 
 
 def get_global_rc() -> {}:
@@ -98,6 +100,7 @@ def get_global_rc() -> {}:
 
     if not os.path.exists(GLOBAL_RC_FILE):
         log_error("Missing global rc file {}".format(GLOBAL_RC_FILE))
+        raise Exception("Sorry, global rc file missing; break")
         return {}
 
     d = {}

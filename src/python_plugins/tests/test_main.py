@@ -18,6 +18,7 @@ import test_client
 from test_client import report_error
 
 from common import *
+import clib_bind
 
 TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
@@ -29,7 +30,7 @@ lst_procs = {}
 def clean_dir(d):
     os.system("rm -rf {}".format(d))
     os.system("mkdir -p {}".format(d))
-    print("Clean dir {}".format(d))
+    log_debug("Clean dir {}".format(d))
     return
 
 
@@ -37,18 +38,17 @@ def run_proc(proc_name: str, rcfile: str):
     # Running in Proc dedicated thread
     #
     module = importlib.import_module("plugin_proc")
-    print("Calling plugin_proc: proc={} rc={}".format(
-        proc_name, rcfile))
     module.main(proc_name, rcfile)
-    print("Returned from plugin_proc: proc={} rc={}".format(
+    log_debug("Returned from plugin_proc: proc={} rc={}".format(
         proc_name, rcfile))
 
 def _load_procs(procs: [str], rcfile: str):
     for proc_name in procs:
-        th = threading.Thread(target=run_proc, args=(proc_name, rcfile,))
+        th = threading.Thread(target=run_proc, args=(proc_name, rcfile,),
+                name="th_{}".format(proc_name))
         th.start()
         lst_procs[proc_name] = th
-        print("Started proc={} rcfile={}".format(proc_name, rcfile))
+        log_debug("Started proc={} rcfile={}".format(proc_name, rcfile))
     return
 
 
@@ -128,12 +128,12 @@ class AnomalyHandler:
     def process(self, req:{}) -> bool:
         action_name = _get_ct_action_name()
         if req[REQ_ACTION_NAME] != action_name:
-            print("INFO: Skip mismathc Action {} != ct {}".format(
+            log_debug("INFO: Skip mismathc Action {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
 
         if req[REQ_INSTANCE_ID] != self.ct_instance_id:
-            print("INFO: Skip mismatch instance-id {} != ct {}".format(
+            log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
 
@@ -180,7 +180,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             global_rc_data[k] = v
     
     if ((not global_rc_data) or (not testcase_data)):
-        print("Missing data global_rc={} testcase_data={} test_case={}".format(
+        log_debug("Missing data global_rc={} testcase_data={} test_case={}".format(
             len(global_rc_data), len(testcase_data), test_case))
         return
 
@@ -223,13 +223,14 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     syspath_append(os.path.join(_CT_DIR, "..", "src"))
 
     # init clib after runnig config is ready
-    test_client.clib_init()
+    set_global_rc_file(global_rc_file)
+    clib_bind.c_lib_init()
 
     for path in global_rc_data["plugin_paths"]:
         # path can be absolute or relative to this filepath.
         syspath_append(os.path.join(_CT_DIR, path))
 
-    _load_procs(list(testcase_data["procs_config"].keys()), global_rc_file)
+    _load_procs(list(procs_conf.keys()), global_rc_file)
 
     # All procs are loaded in dedicated threads.
     # They would have
@@ -250,14 +251,15 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     reg_conf = {}
     while rcnt > 0:
         ret, data = test_client.server_read_request()
+        log_debug("Read ret={} req={}".format(ret, json.dumps(data)))
         if not ret:
             report_error("Server: Pending registrations: Failed to read")
             break
 
         key = list(data)[0]
         val = data[key]
-        if key == test_client.REGISTER_CLIENT:
-            cl_name = parse_reg_client(val)
+        if key == gvars.REQ_REGISTER_CLIENT:
+            cl_name = test_client.parse_reg_client(val)
             if cl_name in reg_conf:
                 report_error("Server: Duplicate registration by client {}".
                         format(cl_name))
@@ -266,8 +268,8 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             reg_conf[cl_name] = []
             rcnt -= 1
 
-        elif key == test_client.REGISTER_ACTION:
-            cl_name, action_name = parse_reg_action(data)
+        elif key == gvars.REQ_REGISTER_ACTION:
+            cl_name, action_name = test_client.parse_reg_action(data)
             if cl_name in reg_conf:
                 report_error("Server: register action:{} for missing client:{}".
                         format(cl_name, action_name),
@@ -320,13 +322,13 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         while not ret:
             ret, req = test_client.server_read_request()
             if not ret:
-                print("Error failed to read. Read again")
+                log_debug("Error failed to read. Read again")
             elif list(req.keys()[0] != ACTION_REQUEST):
-                print("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(req)))
+                log_debug("Internal error. Expected ACTION_REQUEST: {}".format(json.dumps(req)))
                 ret = False
             elif (req[ACTION_REQUEST][gvars.REQ_TYPE] !=
                     gvars.REQ_TYPE_ACTION):
-                print("Internal error. Expected only {} from client".format(json.dumps(req)))
+                log_debug("Internal error. Expected only {} from client".format(json.dumps(req)))
                 ret = False
 
         done = []
@@ -334,7 +336,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
 
         for k in test_anomalies:
             if k.process(req_data):
-                print("Processed read data")
+                log_debug("Processed read data")
                 if k.done():
                     done.append(k)
                 break
@@ -391,7 +393,7 @@ def main():
 
     if ((not test_data) or (not default_data) or 
             (args.testcase and (args.testcase not in test_data))):
-        print("Unable to find testcase ({}) in {}".format(
+        log_debug("Unable to find testcase ({}) in {}".format(
             args.testcase, list(test_data.keys())))
         return
 
@@ -402,11 +404,12 @@ def main():
         test_cases = list(test_data.keys())
 
     for k in test_cases:
-        print("**************** Running   testcase: {} ****************".format(k))
+        log_debug("**************** Running   testcase: {} ****************".format(k))
         run_a_testcase(k, test_data[k], default_data)
-        print("**************** Completed testcase: {} ****************".format(k))
+        log_debug("**************** Completed testcase: {} ****************".format(k))
 
 
 if __name__ == "__main__":
+    threading.current_thread().name = "MAIN"
     main()
 
