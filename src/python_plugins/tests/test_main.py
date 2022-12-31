@@ -80,6 +80,7 @@ class AnomalyHandler:
         self.anomaly_name = action_name
         self.anomaly_published = {}
         self.context = {}
+        log_info("AnomalyHandler: {}: constructed".format(self.anomaly_name))
 
 
     def _get_ct_action_name(self) -> str:
@@ -360,6 +361,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
 
     reg_conf = {}
     while rcnt > 0:
+        log_debug("MAIN: Waiting for registrations rcnt={}".format(rcnt))
         ret, data = test_client.server_read_request()
         if not ret:
             report_error("Server: Pending registrations: Failed to read")
@@ -376,6 +378,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
 
             reg_conf[cl_name] = []
             rcnt -= 1
+            log_debug("MAIN: Registered client {}".format(cl_name))
 
         elif key == gvars.REQ_REGISTER_ACTION:
             cl_name, action_name = test_client.parse_reg_action(val)
@@ -390,6 +393,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
                 break
             lst.append(action_name)
             rcnt -= 1
+            log_debug("MAIN: Registered client:{} action:{}".format(cl_name, action_name))
         else:
             report_error("server: In middle of vetting registration cnt={} req={}"
                     .format(rcnt, json.dumps(data, indent=4)))
@@ -417,6 +421,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         test_anomalies[anomaly_action] = AnomalyHandler(
                 anomaly_action, v, bindings_conf[anomaly_action])
 
+    log_debug("Main: Starting anomaly handlers")
     for name, handler in test_anomalies.items():
         if not handler.start():
             report_error("Failed to start anomaly {}".format(name))

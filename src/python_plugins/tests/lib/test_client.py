@@ -63,6 +63,8 @@ def report_error(errMsg: str):
 # Caches data in one direction with indices for nxt, cnt to relaize Q full
 # state and data buffer.
 #
+SIGNAL_MSG = b"data"
+
 class CacheData:
     def __init__(self, limit:int, c2s:bool):
         self.limit = limit
@@ -87,13 +89,13 @@ class CacheData:
         while True:
             r, _, _ = select.select([self.signal_rd], [], [], 0)
             if self.signal_rd in r:
-                rd = os.read(self.signal_rd, 100)
+                rd = os.read(self.signal_rd, len(SIGNAL_MSG))
             else:
                 break
 
 
     def _raise_signal(self):
-        os.write(self.signal_wr, b"data")
+        os.write(self.signal_wr, SIGNAL_MSG)
 
 
     def write(self, data: {}) -> bool:
@@ -429,7 +431,9 @@ def server_read_request(timeout:int = -1) -> (bool, {}):
     lst = list(rd_fds.keys())
     r = _poll(lst, timeout)
 
-    ret, d = rd_fds[r[0]].read_from_client()
+    ret, d = rd_fds[r[0]].read_from_client(0)
+    log_debug("server_read_request: ret={} req={}".format(
+        ret, str(d)))
     if not ret:
         return False, {}
     if len(d) != 1:
