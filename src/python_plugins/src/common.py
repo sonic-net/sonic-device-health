@@ -50,10 +50,13 @@ _lvl_to_str = [
     ]
 
 
+log_level_set = syslog.LOG_ERR
+
 def _log_write(lvl: int, msg:str):
-    syslog.syslog(lvl, msg)
-    print("{}:{}:{}: {}".format(current_thread().name, _lvl_to_str[lvl], 
-        time.time(), msg))
+    if lvl <= log_level_set:
+        syslog.syslog(lvl, msg)
+        print("{}:{}:{}: {}".format(current_thread().name, _lvl_to_str[lvl], 
+            time.time(), msg))
 
 
 def log_error(msg:str):
