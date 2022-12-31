@@ -86,12 +86,10 @@ class CacheData:
 
 
     def _drain_signal(self):
-        while True:
-            r, _, _ = select.select([self.signal_rd], [], [], 0)
-            if self.signal_rd in r:
-                rd = os.read(self.signal_rd, len(SIGNAL_MSG))
-            else:
-                break
+        # Drain a single signal only
+        r, _, _ = select.select([self.signal_rd], [], [], 0)
+        if self.signal_rd in r:
+            os.read(self.signal_rd, len(SIGNAL_MSG))
 
 
     def _raise_signal(self):

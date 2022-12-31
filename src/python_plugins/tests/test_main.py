@@ -28,6 +28,7 @@ TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
 TEST_DATA_FILE = os.path.join(_CT_DIR, "test_data", "test_data.json")
 
+mitigation_lock = threading.Lock()
 
 lst_procs = {}
 
@@ -66,6 +67,7 @@ def write_conf(fl, d) -> {}:
 class AnomalyHandler:
     def __init__(self, action_name:str, action_inp:{}, bindings:[]):
         self.test_run_cnt = action_inp.get("run_cnt", 1)
+        self.mitigation_timeout = action_inp.get("mitigation_timeout", 60)
         self.test_run_index = 0
         self.test_instances = action_inp["instances"]
         self.test_instance_index = 0
@@ -223,7 +225,6 @@ class AnomalyHandler:
                     _report_error_response("mismatch attr:{} exp:{}".
                             format(attr, val_expect))
 
-        return_code = req[gvars.REQ_RESULT_CODE]
         if not self.anomaly_published:
             self.anomaly_published = req
             self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_INIT
@@ -233,6 +234,9 @@ class AnomalyHandler:
 
         # Are we done?
         seq_complete = False
+        return_code = req[gvars.REQ_RESULT_CODE]
+        return_str = req[gvars.REQ_RESULT_STR]
+
         if return_code != 0:
             # Force complete.
             seq_complete = True
@@ -240,10 +244,31 @@ class AnomalyHandler:
             self.action_seq_index += 1
             seq_complete = self.action_seq_index >= len(self.action_seq)
 
+        if not seq_complete and (self.action_seq_index == 1):
+            # Start of mitigation sequence
+            if mitigation_lock.locked():
+                return_code = -1
+                return_str = "Internal error: Thread has lock before start of mitigation"
+                log_error(return_str)
+                seq_complete = True
+            else:
+                # Block until lock acquired
+                mitigation_lock.acquire_lock(self.mitigation_timeout)
+
+        if (not seq_complete) and (not mitigation_lock.locked()):
+            # lock has timedout
+                return_code = -2
+                return_str = "Mitigation lock timedout"
+                log_error(return_str)
+                seq_complete = True
+
         if seq_complete:
+            if mitigation_lock.locked():
+                mitigation_lock.release()
+
             # Re-publish anomaly with completed state
             self.anomaly_published[gvars.REQ_RESULT_CODE] = return_code
-            self.anomaly_published[gvars.REQ_RESULT_STR] = req[gvars.REQ_RESULT_STR]
+            self.anomaly_published[gvars.REQ_RESULT_STR] = return_str
             self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_DONE
             self._do_publish(self.anomaly_published)
 
