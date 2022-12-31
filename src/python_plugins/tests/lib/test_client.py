@@ -310,20 +310,22 @@ def clib_register_action(action_name: bytes) -> int:
     return 0
 
 
-def clib_touch_heartbeat(action_name:bytes, instance_id: bytes):
+def clib_touch_heartbeat(action_name:bytes, instance_id: bytes) -> int:
     if not _is_initialized():
         report_error("touch_heartbeat: client not registered {}".format(action_name))
-        return
+        return -1
 
-    if action_name not in th_local.actions:
-        report_error("Heartbeat from unregistered action".format(actrion_name))
-        return
+    name = action_name.decode("utf-8")
+    if name not in th_local.actions:
+        report_error("Heartbeat from unregistered action {}".format(name))
+        return -1
 
     th_local.cache_svc.write_to_server({
         gvars.REQ_HEARTBEAT: {
             gvars.REQ_CLIENT_NAME: th_local.cl_name,
-            gvars.REQ_ACTION_NAME: action_name.decode("utf-8"),
+            gvars.REQ_ACTION_NAME: name,
             gvars.REQ_INSTANCE_ID: instance_id.decode("utf-8") }})
+    return 0
 
  
 def _read_req() -> bool:

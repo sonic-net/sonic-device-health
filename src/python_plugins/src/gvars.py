@@ -26,6 +26,8 @@ REQ_TYPE_SHUTDOWN = "shutdown"
 REQ_CLIENT_NAME = "client_name"
 REQ_ACTION_NAME = "action_name"
 REQ_INSTANCE_ID = "instance_id"
+REQ_ANOMALY_INSTANCE_ID = "anomaly_instance_id"
+REQ_ANOMALY_KEY = "anomaly_key"
 REQ_CONTEXT = "context"
 REQ_TIMEOUT = "timeout"
 REQ_HEARTBEAT_INTERVAL = "heartbeat_interval"
@@ -34,6 +36,11 @@ REQ_PAUSE = "action_pause"
 REQ_ACTION_DATA = "action_data"
 REQ_RESULT_CODE = "result_code"
 REQ_RESULT_STR = "result_str"
+
+REQ_MITIGATION_STATE = "state" 
+REQ_MITIGATION_STATE_INIT = "init"
+REQ_MITIGATION_STATE_PROG = "in-progress"
+REQ_MITIGATION_STATE_DONE = "complete"
 
 # run type
 TEST_RUN = False

@@ -130,10 +130,12 @@ class LoMPluginHolder:
         self.thr = None         # Thread object. Exists only when a req is outstanding
                                 # until the main thread receives signal from the thread
                                 # Main thread call join and reset to None
-        self.response = None    # Response returned by plugin for the request
+                                # Response returned by plugin for the request
+        self.response:ActionResponse = None
                                 # Arrives via the req thread.
         self.last_request = {}  # Last request sent to plugin
         self.req_start = 0      # Timestamp of request start.
+        self.req_end = 0        # Timestamp of request end.
         self.name = ""          # Name of the action handled by this plugin
         self.touch = None       # Last touch from plugin while running request
         self.touchSent = None   # Last touch that is sent
@@ -143,7 +145,7 @@ class LoMPluginHolder:
 
         try:
             module = importlib.import_module(module_name)
-            plugin = getattr(module, "LoMPlugin")(config, self.do_touch_hearbeat)
+            plugin = getattr(module, "LoMPlugin")(config, self.do_touch_heartbeat)
             if name != plugin.getName():
                 log_error("Action name mismatch in plugin_procs_actions.conf.json")
                 return
@@ -188,7 +190,7 @@ class LoMPluginHolder:
         return True
 
 
-    def do_touch_hearbeat(self, instance_id:str):
+    def do_touch_heartbeat(self, instance_id:str):
         # Call back from loaded plugin.
         # It is passed as callable to plugin.
         # It is expected to call periodically when it is blocking
@@ -198,6 +200,7 @@ class LoMPluginHolder:
         #
         self.touch = int(time.time())
         self.instance_id = instance_id
+        self._raise_signal()
 
 
     def send_heartbeat(self) -> bool:
@@ -221,10 +224,9 @@ class LoMPluginHolder:
 
 
     def _raise_signal(self):
-        # Called from request thread upon plugin returning from request
+        # Called from request thread upon plugin returning from request or heartbeat
         # call to indicate to main thread.
         #
-        self.request_end = time.time()
         os.write(self.fdW, b"Hello")
         return
 
@@ -244,6 +246,7 @@ class LoMPluginHolder:
         # Running in a dedicated thread. So make a blocking call.
         #
         self.response = self.plugin.request(self.last_request)
+        self.req_end = time.time()
 
         log_info("{}: Completed request".format(self.name))
 
@@ -283,18 +286,24 @@ class LoMPluginHolder:
     def handle_response(self):
         tnow = time.time()
 
+        self._drain_signal()
+
         # Called from main thread, upon receiving signal
+        # May be response or heartbeat
         #
-        if not self._chk_thread_done():
-            log_error("{}: Internal error: thread is not done in handle_response".format(
-                self.name))
+        if not self.req_end:
+            self.send_heartbeat()
             return
 
-        self._drain_signal()
+        if self.response == None:
+            log_error("Internal error: Expect response")
+            return 
 
         # Write response to backend server/engine.
         #
         clib_bind.write_action_response(self.response)
+        self.response = None
+        self.req_end = 0
 
         log_info("{}: request taken:{} process-pause:{}".format(
             self.name, time.time() - self.req_start, self.action_pause))
@@ -308,9 +317,12 @@ class LoMPluginHolder:
             log_error("{}: request dropped as busy with previous".format(self.name))
             return
 
+        if self.response:
+            log_error("Internal error: request sent before response for last")
+            return
+
         # Kick off thread to raise request to loaded plugin as blocking.
         #
-        self.response = {}
         self.req_start = time.time()
         self.last_request = req
         self.thr = threading.Thread(target=self._run_request,
@@ -330,7 +342,6 @@ class LoMPluginHolder:
                 if fdR in r:
                     signal_rcvd = True
                     break
-                send_heartbeat()
 
             if signal_rcvd:
                 handle_response()

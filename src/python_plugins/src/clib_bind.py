@@ -178,11 +178,17 @@ def _update_globals():
 
     gvars.REQ_ACTION_NAME = _get_str_clib_globals("REQ_ACTION_NAME")
     gvars.REQ_INSTANCE_ID = _get_str_clib_globals("REQ_INSTANCE_ID")
+    gvars.REQ_ANOMALY_INSTANCE_ID = _get_str_clib_globals("REQ_ANOMALY_INSTANCE_ID")
+    gvars.REQ_ANOMALY_KEY = _get_str_clib_globals("REQ_ANOMALY_KEY")
     gvars.REQ_CONTEXT = _get_str_clib_globals("REQ_CONTEXT")
     gvars.REQ_TIMEOUT = _get_str_clib_globals("REQ_TIMEOUT")
     gvars.REQ_ACTION_DATA = _get_str_clib_globals("REQ_ACTION_DATA")
     gvars.REQ_RESULT_CODE = _get_str_clib_globals("REQ_RESULT_CODE")
     gvars.REQ_RESULT_STR  = _get_str_clib_globals("REQ_RESULT_STR")
+    gvars.REQ_MITIGATION_STATE = _get_str_clib_globals("REQ_MITIGATION_STATE")
+    gvars.REQ_MITIGATION_STATE_INIT = _get_str_clib_globals("REQ_MITIGATION_STATE_INIT")
+    gvars.REQ_MITIGATION_STATE_PROG = _get_str_clib_globals("REQ_MITIGATION_STATE_PROG")
+    gvars.REQ_MITIGATION_STATE_DONE = _get_str_clib_globals("REQ_MITIGATION_STATE_DONE")
 
 class ActionRequest:
     def __init__(self, sdata: str):
@@ -191,6 +197,8 @@ class ActionRequest:
         if self.type == gvars.REQ_TYPE_ACTION:
             self.action_name = data[gvars.REQ_ACTION_NAME]
             self.instance_id = data[gvars.REQ_INSTANCE_ID]
+            self.anomaly_instance_id = data[gvars.REQ_ANOMALY_INSTANCE_ID]
+            self.anomaly_key = data[gvars.REQ_ANOMALY_KEY]
             self.context = data[gvars.REQ_CONTEXT]
             self.timeout = data[gvars.REQ_TIMEOUT]
 
@@ -218,6 +226,8 @@ def read_action_request() -> (bool, ActionRequest):
 class ActionResponse:
     def __init__(self, action_name:str,
             instance_id:str,
+            anomaly_instance_id:str,
+            anomaly_key:str,
             action_data: str,
             result_code:int,
             result_str:str) :
@@ -225,6 +235,8 @@ class ActionResponse:
                 gvars.REQ_ACTION_NAME: action_name,
                 gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
                 gvars.REQ_INSTANCE_ID: instance_id,
+                gvars.REQ_ANOMALY_INSTANCE_ID: anomaly_instance_id,
+                gvars.REQ_ANOMALY_KEY: anomaly_key,
                 gvars.REQ_ACTION_DATA: action_data,
                 gvars.REQ_RESULT_CODE: result_code,
                 gvars.REQ_RESULT_STR : result_str })

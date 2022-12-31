@@ -50,7 +50,7 @@ class LoMPlugin:
 
     def request(self, req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
         ret = clib_bind.ActionResponse (self.action_name, req.instance_id,
-                self._get_resp(), 0, "")
+                req.anomaly_instance_id, req.anomaly_key, self._get_resp(), 0, "")
 
         if not self.valid:
             log_error("{}: Plugin is not valid. Failing request".format(action_name))

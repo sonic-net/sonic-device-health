@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import syslog
+import time
 from threading import current_thread
 from typing import NamedTuple
 
@@ -51,7 +52,8 @@ _lvl_to_str = [
 
 def _log_write(lvl: int, msg:str):
     syslog.syslog(lvl, msg)
-    print("{}:{}: {}".format(current_thread().name, _lvl_to_str[lvl], msg))
+    print("{}:{}:{}: {}".format(current_thread().name, _lvl_to_str[lvl], 
+        time.time(), msg))
 
 
 def log_error(msg:str):

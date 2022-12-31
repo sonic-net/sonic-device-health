@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+# TODO: Get anomaly key
 import argparse
 import json
 import os
@@ -15,11 +16,13 @@ sys.path.append(os.path.join(_CT_DIR, "lib"))
 import gvars
 
 gvars.TEST_RUN = True
+
 import test_client
 from test_client import report_error
 
 from common import *
 import clib_bind
+import helpers
 
 TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
@@ -31,7 +34,7 @@ lst_procs = {}
 def clean_dir(d):
     os.system("rm -rf {}".format(d))
     os.system("mkdir -p {}".format(d))
-    log_debug("Clean dir {}".format(d))
+    log_info("Clean dir {}".format(d))
     return
 
 
@@ -40,7 +43,7 @@ def run_proc(proc_name: str, rcfile: str):
     #
     module = importlib.import_module("plugin_proc")
     module.main(proc_name, rcfile)
-    log_debug("Returned from plugin_proc: proc={} rc={}".format(
+    log_info("Returned from plugin_proc: proc={} rc={}".format(
         proc_name, rcfile))
 
 def _load_procs(procs: [str], rcfile: str):
@@ -49,7 +52,7 @@ def _load_procs(procs: [str], rcfile: str):
                 name="th_{}".format(proc_name))
         th.start()
         lst_procs[proc_name] = th
-        log_debug("Started proc={} rcfile={}".format(proc_name, rcfile))
+        log_info("Started proc={} rcfile={}".format(proc_name, rcfile))
     return
 
 
@@ -72,6 +75,10 @@ class AnomalyHandler:
         self.action_seq_index = 0
         self.instance_id_index = 0
         self.ct_instance_id = None
+        self.anomaly_instance_id = None
+        self.anomaly_name = action_name
+        self.anomaly_published = {}
+        self.context = {}
 
 
     def _get_ct_action_name(self) -> str:
@@ -89,7 +96,7 @@ class AnomalyHandler:
         if attr_name == gvars.REQ_INSTANCE_ID:
             idx = self.instance_id_index
             self.instance_id_index += 1
-            return "id_{}_run_{}_idx_{}".format(self.action_seq[0],
+            return "id_{}_run_{}_idx_{}".format(self.anomaly_name,
                     self.test_run_index, idx)
         if attr_name == gvars.REQ_TIMEOUT:
             return 0        # No timeout
@@ -105,6 +112,10 @@ class AnomalyHandler:
 
         # Each test instance run start from anomaly action. Reset seq to 0
         self.action_seq_index = 0
+        self.context = {}
+        self.anomaly_instance_id = ""
+        self.anomaly_key = ""
+        self.anomaly_published = {}
 
         # Get current test instance
         self.test_inst = self.test_instances.get(self.test_instance_index, {})
@@ -119,19 +130,56 @@ class AnomalyHandler:
     def _write_request(self):
         # Send request to anomaly action
         self.ct_instance_id = self._get_inst_val(gvars.REQ_INSTANCE_ID)
+        if not self.anomaly_instance_id:
+            self.anomaly_instance_id = self.ct_instance_id
+
         test_client.server_write_request({ gvars.REQ_ACTION_REQUEST: {
             gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
             gvars.REQ_ACTION_NAME: self._get_ct_action_name(),
             gvars.REQ_INSTANCE_ID: self.ct_instance_id,
-            gvars.REQ_CONTEXT: self._get_inst_val(gvars.REQ_CONTEXT),
+            gvars.REQ_ANOMALY_INSTANCE_ID: self.anomaly_instance_id,
+            gvars.REQ_ANOMALY_KEY: self.anomaly_key,
+            gvars.REQ_CONTEXT: self.context,
             gvars.REQ_TIMEOUT: self._get_inst_val(gvars.REQ_TIMEOUT)}})
-        return
+        return 
+
+
+    def _do_publish(self, req:{}):
+        helpers.publish_event(self.anomaly_name, req)
+
+
+    def process_plugin_heartbeat(self, req:{}) -> bool:
+        action_name = self._get_ct_action_name()
+        if req[gvars.REQ_ACTION_NAME] != action_name:
+            log_debug("INFO: Skip mismatch Action {} != ct {}".format(
+                req[gvars.REQ_ACTION_NAME], action_name))
+            return False
+
+        if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
+            log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
+                req[gvars.REQ_INSTANCE_ID], self.ct_instance_id))
+            return False
+
+        if not self.anomaly_published:
+            data = req
+        else:
+            self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_PROG
+            data = self.anomaly_published
+
+        data[gvars.REQ_HEARTBEAT] = str(time.time())
+        self._do_publish(data)
+        return True
+
+
+    def _report_error_response(self, req:{}, msg:str):
+        log_error("{}: msg:{} req:{}".format(msg,
+            self.anomaly_name, json.dumps(req)))
 
 
     def process_plugin_response(self, req:{}) -> bool:
         action_name = self._get_ct_action_name()
         if req[gvars.REQ_ACTION_NAME] != action_name:
-            log_debug("INFO: Skip mismathc Action {} != ct {}".format(
+            log_debug("INFO: Skip mismatch Action {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
 
@@ -140,31 +188,67 @@ class AnomalyHandler:
                 req[REQ_ACTION_NAME], action_name))
             return False
 
+        # Validate  response
+        if req[gvars.REQ_ANOMALY_INSTANCE_ID] != self.anomaly_instance_id:
+            self._report_error_response("Mismatch in anomaly_instance ID{}".
+                    format(self.anomaly_instance_id))
+
+            if self.anomaly_key:
+                if req[gvars.REQ_ANOMALY_KEY] != self.anomaly_key:
+                    self._report_error_response("Mismatch in anomaly_key {}".
+                        format(self.anomaly_key))
+            elif not req[gvars.REQ_ANOMALY_KEY]:
+                self._report_error_response("Misssing anomaly_key")
+            else:
+                self.anomaly_key = req[gvars.REQ_ANOMALY_KEY]
+
         test_act_data = self.test_inst.get(action_name, {})
         for attr in [gvars.REQ_ACTION_DATA, gvars.REQ_RESULT_CODE,
                 gvars.REQ_RESULT_STR]:
             val_expect = test_act_data.get(attr, None)
             if (val_expect != None) and (val_expect != ""):
                 if req[attr] != val_expect:
-                    report_error("{}: mismatch attr:{} exp:{} != rcvd:{}".
-                            format(action_name, attr, val_expect, req[attr]))
+                    _report_error_response("mismatch attr:{} exp:{}".
+                            format(attr, val_expect))
+
+        return_code = req[gvars.REQ_RESULT_CODE]
+        if not self.anomaly_published:
+            self.anomaly_published = req
+            self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_INIT
+            self._do_publish(self.anomaly_published)
+        else:
+            self._do_publish(req)
 
         # Are we done?
-        self.action_seq_index += 1
+        seq_complete = False
+        if return_code != 0:
+            # Force complete.
+            seq_complete = True
+        else:
+            self.action_seq_index += 1
+            seq_complete = self.action_seq_index >= len(self.action_seq)
 
-        if self.action_seq_index >= len(self.action_seq):
+        if seq_complete:
+            # Re-publish anomaly with completed state
+            self.anomaly_published[gvars.REQ_RESULT_CODE] = return_code
+            self.anomaly_published[gvars.REQ_RESULT_STR] = req[gvars.REQ_RESULT_STR]
+            self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_DONE
+            self._do_publish(self.anomaly_published)
+
             # increment run index, as are done with binding sequence.
             self.test_run_index += 1
             if self.test_run_index >= self.test_run_cnt:
                 self.run_complete = True
                 log_info("Test run done for anomaly {} cnt: {}".
-                        format(self.action_seq[0], self.test_run_cnt))
+                        format(self.anomaly_name, self.test_run_cnt))
                 return True
 
-        # Are we done with binding sequence ? If yes restart
-        if self.action_seq_index >= len(self.action_seq):
+            # Restart the run
             start()
             return True
+
+        # Build context
+        self.context[action_name] = req[gvars.REQ_ACTION_DATA]
 
         # Write request to next action in sequence
         self._write_request()
@@ -187,7 +271,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             global_rc_data[k] = v
     
     if ((not global_rc_data) or (not testcase_data)):
-        log_debug("Missing data global_rc={} testcase_data={} test_case={}".format(
+        log_error("Missing data global_rc={} testcase_data={} test_case={}".format(
             len(global_rc_data), len(testcase_data), test_case))
         return
 
@@ -258,7 +342,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     reg_conf = {}
     while rcnt > 0:
         ret, data = test_client.server_read_request()
-        log_debug("Read ret={} req={}".format(ret, data))
         if not ret:
             report_error("Server: Pending registrations: Failed to read")
             break
@@ -320,33 +403,47 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             report_error("Failed to start anomaly {}".format(name))
             return
 
+    # Run while there is one or more active anomalies
     while test_anomalies:
         ret = False
+        is_heartbeat = False
+
+        # Read valid request
         while not ret:
             ret, req = test_client.server_read_request()
-                ret, json.dumps(req)))
             if not ret:
-                log_debug("Error failed to read. Read again")
+                log_error("Error failed to read. Read again")
+            elif (list(req)[0] == gvars.REQ_HEARTBEAT):
+                req_data = req[gvars.REQ_HEARTBEAT]
+                is_heartbeat = True
             elif (list(req)[0] != gvars.REQ_ACTION_REQUEST):
-                log_debug("Internal error. Expected '{}': {}".format(
+                log_error("Internal error. Expected '{}': {}".format(
                     gvars.REQ_ACTION_REQUEST, json.dumps(req)))
                 ret = False
             elif (req[gvars.REQ_ACTION_REQUEST][gvars.REQ_TYPE] !=
                     gvars.REQ_TYPE_ACTION):
-                log_debug("Internal error. Expected only {} from client {}".
+                log_error("Internal error. Expected only {} from client {}".
                         format(gvars.REQ_ACTION_REQUEST, json.dumps(req)))
                 ret = False
                 # clients ony send response 
+            else:
+                req_data = req[gvars.REQ_ACTION_REQUEST]
 
+        # Process request. Loop until a handler accepts
         done = []
-        req_data = req[gvars.REQ_ACTION_REQUEST]
-        
         for name, handler in test_anomalies.items():
-            if handler.process_plugin_response(req_data):
-                log_debug("Processed read data")
-                if handler.done():
-                    done.append(name)
+            if is_heartbeat:
+                ret = handler.process_plugin_heartbeat(req_data)
+            else:
+                ret = handler.process_plugin_response(req_data)
+                if ret:
+                    if handler.done():
+                        done.append(name)
+            if ret:
+                # request processed
                 break
+
+        # drop done anomalies from tracking
         for name in done:
             test_anomalies.pop(name, None)
 
@@ -403,9 +500,11 @@ def main():
 
     if ((not test_data) or (not default_data) or 
             (args.testcase and (args.testcase not in test_data))):
-        log_debug("Unable to find testcase ({}) in {}".format(
+        log_error("Unable to find testcase ({}) in {}".format(
             args.testcase, list(test_data.keys())))
         return
+
+    helpers.publish_init("LoM_Test")
 
     test_cases = []
     if args.testcase:
@@ -414,9 +513,9 @@ def main():
         test_cases = list(test_data.keys())
 
     for k in test_cases:
-        log_debug("**************** Running   testcase: {} ****************".format(k))
+        log_info("**************** Running   testcase: {} ****************".format(k))
         run_a_testcase(k, test_data[k], default_data)
-        log_debug("**************** Completed testcase: {} ****************".format(k))
+        log_info("**************** Completed testcase: {} ****************".format(k))
 
 
 if __name__ == "__main__":
