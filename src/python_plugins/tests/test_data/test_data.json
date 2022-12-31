@@ -7,7 +7,8 @@
             "proc_plugins_conf_name":  "proc_plugins.json",
             "actions_config_name": "actions_conf.json",
             "actions_binding_config_name": "actions_binding.json",
-            "plugin_paths": [ ".", "./plugins", "../tests/plugins", "../tests/lib" ]
+            "plugins_data_name": "plugins_data.json",
+            "plugin_paths": [ ".", "./plugins", "../tests/plugins", "../tests/lib", "./vendor/sonic" ]
         }
     },
     "test_cases": {
@@ -15,7 +16,8 @@
             "_description": [
                 "Key 'test-0' is test case name.",
                 "plugin paths provide paths to plugins, if different",
-                "from plugins dir under tests"
+                "from plugins dir under tests",
+                "Provide configurable entities"
             ],
             "actions_config": {
                 "_description": [
@@ -73,20 +75,27 @@
                 ],
 
                 "test-0-action-0": {
-                    "action_data": {
-                        "0": { "foo_0": "bar_0" }
+                    "instances": {
+                        "0": {
+                            "anomaly_key": "foo_0_bar_0",
+                            "action_data": { "foo_0": "bar_0" }
+                        }
                     }
                 },
-
                 "test-0-action-1": {
-                    "action_data": {
-                        "0": { "foo_1": "bar_1" }
+                    "instances": {
+                        "0": {
+                            "anomaly_key": "DONT_EXPECT_foo_1_bar_1",
+                            "action_data": { "foo_1": "bar_1"}
+                        }
                     }
                 },
-
                 "test-0-action-2": {
-                    "action_data": {
-                        "0": { "foo_2": "bar_2" }
+                    "instances": {
+                        "0": {
+                            "anomaly_key": "DONT_EXPECT_foo_2_bar_2",
+                            "action_data": { "foo_2": "bar_2" }
+                        }
                     }
                 }
             },

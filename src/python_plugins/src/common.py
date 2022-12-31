@@ -169,6 +169,17 @@ def get_actions_binding_conf_file(static = False):
     return fl
 
 
+def get_plugins_data_file(static = False):
+    # Return path for static/running path
+    cfg_path = get_config_path(static)
+    if not cfg_path:
+        return ""
+    fl = os.path.join(cfg_path, get_global_rc()["plugins_data_name"])
+    if not os.path.exists(fl):
+        return ""
+    return fl
+
+
 def is_running_config_available() -> bool:
     if (get_proc_plugins_conf_file() and
             get_actions_conf_file() and
@@ -200,6 +211,13 @@ def get_actions_conf() -> {}:
 
 def get_actions_binding_conf(action_name:str) -> {}:
     d = _get_data(get_actions_binding_conf_file())
+    if action_name:
+        d = d.get(action_name, {})
+    return d
+
+
+def get_plugin_data(action_name:str) -> {}:
+    d = _get_data(get_plugins_data_file())
     if action_name:
         d = d.get(action_name, {})
     return d

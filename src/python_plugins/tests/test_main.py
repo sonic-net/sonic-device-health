@@ -76,6 +76,7 @@ class AnomalyHandler:
         self.instance_id_index = 0
         self.ct_instance_id = None
         self.anomaly_instance_id = None
+        self.anomaly_key = ""
         self.anomaly_name = action_name
         self.anomaly_published = {}
         self.context = {}
@@ -118,7 +119,7 @@ class AnomalyHandler:
         self.anomaly_published = {}
 
         # Get current test instance
-        self.test_inst = self.test_instances.get(self.test_instance_index, {})
+        self.test_inst = self.test_instances.get(str(self.test_instance_index), {})
         self.test_instance_index += 1
         if self.test_instance_index > len(self.test_instances):
             self.test_instance_index = 0
@@ -193,14 +194,14 @@ class AnomalyHandler:
             self._report_error_response("Mismatch in anomaly_instance ID{}".
                     format(self.anomaly_instance_id))
 
-            if self.anomaly_key:
-                if req[gvars.REQ_ANOMALY_KEY] != self.anomaly_key:
-                    self._report_error_response("Mismatch in anomaly_key {}".
-                        format(self.anomaly_key))
-            elif not req[gvars.REQ_ANOMALY_KEY]:
-                self._report_error_response("Misssing anomaly_key")
-            else:
-                self.anomaly_key = req[gvars.REQ_ANOMALY_KEY]
+        if self.anomaly_key:
+            if req[gvars.REQ_ANOMALY_KEY] != self.anomaly_key:
+                self._report_error_response("Mismatch in anomaly_key {}".
+                    format(self.anomaly_key))
+        elif not req[gvars.REQ_ANOMALY_KEY]:
+            self._report_error_response("Misssing anomaly_key")
+        else:
+            self.anomaly_key = req[gvars.REQ_ANOMALY_KEY]
 
         test_act_data = self.test_inst.get(action_name, {})
         for attr in [gvars.REQ_ACTION_DATA, gvars.REQ_RESULT_CODE,
@@ -292,6 +293,9 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
 
     bindings_conf = write_conf(os.path.join(cfg_dir, global_rc_data["actions_binding_config_name"]),
             testcase_data["bindings_config"])
+
+    write_conf(os.path.join(cfg_dir, global_rc_data["plugins_data_name"]),
+            testcase_data.get("test_plugin_data", {}))
 
     global_rc_file = os.path.join(cfg_dir, global_rc_data["global_rc_name"])
     with open(global_rc_file, "w") as s:

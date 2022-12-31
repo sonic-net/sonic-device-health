@@ -338,13 +338,13 @@ class LoMPluginHolder:
             #
             signal_rcvd = False
             while int(time.time() - self.req_start) < self.last_request.timeout:
-                r, _, _ = select.select([fdR], [], [], ACTIVE_POLL_TIMEOUT)
-                if fdR in r:
+                r, _, _ = select.select([self.fdR], [], [], ACTIVE_POLL_TIMEOUT)
+                if self.fdR in r:
                     signal_rcvd = True
                     break
 
             if signal_rcvd:
-                handle_response()
+                self.handle_response()
             else:
                 self.plugin_timedout = True
                 log_error("{}:request has and still timed out".format(self.name))

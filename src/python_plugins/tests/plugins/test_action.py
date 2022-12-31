@@ -32,6 +32,8 @@ class LoMPlugin:
         self.hb_callback = fn_hb
         self.shutdown_done = False
         self.req_idx = 0
+        self.plugin_inst_index = 0
+        self.plugin_instances = get_plugin_data(self.action_name).get("instances", {})
         log_debug("test_action.py: LoMPlugin created for {}".format(self.action_name))
         
 
@@ -43,14 +45,23 @@ class LoMPlugin:
         return self.valid and not self.shutdown_done
 
     
-    def _get_resp(self) -> str:
-        resp = self.action_config.get(gvars.REQ_ACTION_DATA, DEFAULT_RESP)
-        return json.dumps(resp)
+    def _get_resp(self) -> (str, str):
+        inst = self.plugin_instances.get(str(self.plugin_inst_index), {})
+        self.plugin_inst_index += 1
+        if self.plugin_inst_index > len(self.plugin_instances):
+            self.plugin_inst_index = 0
+
+        resp = inst.get(gvars.REQ_ACTION_DATA, DEFAULT_RESP)
+        key = inst.get(gvars.REQ_ANOMALY_KEY, "")
+        return key, json.dumps(resp)
 
 
     def request(self, req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
+        key, resp = self._get_resp()
+        if req.anomaly_key:
+            key = req.anomaly_key
         ret = clib_bind.ActionResponse (self.action_name, req.instance_id,
-                req.anomaly_instance_id, req.anomaly_key, self._get_resp(), 0, "")
+                req.anomaly_instance_id, key, resp, 0, "")
 
         if not self.valid:
             log_error("{}: Plugin is not valid. Failing request".format(action_name))
