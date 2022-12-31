@@ -48,7 +48,7 @@ class LoMPlugin:
     def _get_resp(self) -> (str, str):
         inst = self.plugin_instances.get(str(self.plugin_inst_index), {})
         self.plugin_inst_index += 1
-        if self.plugin_inst_index > len(self.plugin_instances):
+        if self.plugin_inst_index >= len(self.plugin_instances):
             self.plugin_inst_index = 0
 
         resp = inst.get(gvars.REQ_ACTION_DATA, DEFAULT_RESP)

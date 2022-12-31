@@ -121,7 +121,7 @@ class AnomalyHandler:
         # Get current test instance
         self.test_inst = self.test_instances.get(str(self.test_instance_index), {})
         self.test_instance_index += 1
-        if self.test_instance_index > len(self.test_instances):
+        if self.test_instance_index >= len(self.test_instances):
             self.test_instance_index = 0
 
         self._write_request()
@@ -245,7 +245,7 @@ class AnomalyHandler:
                 return True
 
             # Restart the run
-            start()
+            self.start()
             return True
 
         # Build context

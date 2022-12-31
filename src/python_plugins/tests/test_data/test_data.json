@@ -129,7 +129,7 @@
                     "----------------"
                 ],
                 "test-0-action-0": {
-                    "run_cnt": 1,
+                    "run_cnt": 2,
                     "instances": {
                         "0": {
                             "test-0-action-0": {
