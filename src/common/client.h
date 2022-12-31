@@ -153,7 +153,10 @@ void touch_heartbeat(const char *action, const char *instance_id);
  *  Order in list matches order of invocation
  *
  * Input:
- *  None
+ *  timeout - Count of seconds to wait
+ *      0 -- No wait
+ *     >0 -- Count of seconds to wait
+ *     <0 -- No timeout. Block until data
  *
  * Output:
  *
@@ -181,7 +184,7 @@ const char *REQ_RESULT_CODE "result_code"
 const char *REQ_RESULT_STR "result_str"
 
 
-const char *read_action_request();
+const char *read_action_request(int timeout=-1);
 
 
 /*

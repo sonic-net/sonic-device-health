@@ -124,6 +124,8 @@ class AnomalyHandler:
         if self.test_instance_index >= len(self.test_instances):
             self.test_instance_index = 0
 
+        log_info("AnomalyHandler: Raise request to Anomaly {}".
+                format(self.anomaly_name))
         self._write_request()
         return True
 
@@ -134,14 +136,17 @@ class AnomalyHandler:
         if not self.anomaly_instance_id:
             self.anomaly_instance_id = self.ct_instance_id
 
-        test_client.server_write_request({ gvars.REQ_ACTION_REQUEST: {
+        req = { gvars.REQ_ACTION_REQUEST: {
             gvars.REQ_TYPE: gvars.REQ_TYPE_ACTION,
             gvars.REQ_ACTION_NAME: self._get_ct_action_name(),
             gvars.REQ_INSTANCE_ID: self.ct_instance_id,
             gvars.REQ_ANOMALY_INSTANCE_ID: self.anomaly_instance_id,
             gvars.REQ_ANOMALY_KEY: self.anomaly_key,
             gvars.REQ_CONTEXT: self.context,
-            gvars.REQ_TIMEOUT: self._get_inst_val(gvars.REQ_TIMEOUT)}})
+            gvars.REQ_TIMEOUT: self._get_inst_val(gvars.REQ_TIMEOUT)}}
+        test_client.server_write_request(req)
+        log_debug("AnomalyHandler: Written request {}: {}".
+                format(self.anomaly_name, str(req)))
         return 
 
 
@@ -152,12 +157,12 @@ class AnomalyHandler:
     def process_plugin_heartbeat(self, req:{}) -> bool:
         action_name = self._get_ct_action_name()
         if req[gvars.REQ_ACTION_NAME] != action_name:
-            log_debug("INFO: Skip mismatch Action {} != ct {}".format(
+            log_debug("INFO: Heartbeat: Skip mismatch Action {} != ct {}".format(
                 req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
-            log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
+            log_debug("INFO: Heartbeat: Skip mismatch instance-id {} != ct {}".format(
                 req[gvars.REQ_INSTANCE_ID], self.ct_instance_id))
             return False
 
@@ -169,6 +174,8 @@ class AnomalyHandler:
 
         data[gvars.REQ_HEARTBEAT] = str(time.time())
         self._do_publish(data)
+        log_debug("INFO: Heartbeat: Done Action {} != ct {}".format(
+            req[gvars.REQ_ACTION_NAME], action_name))
         return True
 
 
@@ -188,6 +195,9 @@ class AnomalyHandler:
             log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
                 req[REQ_ACTION_NAME], action_name))
             return False
+
+        log_info("AnomalyHandler: Read response {}: {}".format(
+            self.anomaly_name, str(req)))
 
         # Validate  response
         if req[gvars.REQ_ANOMALY_INSTANCE_ID] != self.anomaly_instance_id:
@@ -240,11 +250,12 @@ class AnomalyHandler:
             self.test_run_index += 1
             if self.test_run_index >= self.test_run_cnt:
                 self.run_complete = True
-                log_info("Test run done for anomaly {} cnt: {}".
+                log_info("AnomalyHandler: Test run done for anomaly {} cnt: {}".
                         format(self.anomaly_name, self.test_run_cnt))
                 return True
 
             # Restart the run
+            log_info("AnomalyHandler: Read response {}: {}".format(self.anomaly_name))
             self.start()
             return True
 
@@ -252,7 +263,11 @@ class AnomalyHandler:
         self.context[action_name] = req[gvars.REQ_ACTION_DATA]
 
         # Write request to next action in sequence
+        log_info("AnomalyHandler: to next action{}: {}: {}".format(
+            self.anomaly_name, self.action_seq_index, self._get_ct_action_name))
         self._write_request()
+        log_debug("INFO: Response 0: Done Action {} != ct {}".format(
+            req[gvars.REQ_ACTION_NAME], action_name))
         return True
 
 
@@ -411,6 +426,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     while test_anomalies:
         ret = False
         is_heartbeat = False
+        log_debug("****** DROP: in loop")
 
         # Read valid request
         while not ret:
@@ -436,6 +452,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         # Process request. Loop until a handler accepts
         done = []
         for name, handler in test_anomalies.items():
+            log_debug("*********** DROP: is_heartbeat={}".format(is_heartbeat))
             if is_heartbeat:
                 ret = handler.process_plugin_heartbeat(req_data)
             else:
@@ -447,6 +464,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
                 # request processed
                 break
 
+        log_debug("*********** DROP: go for next")
         # drop done anomalies from tracking
         for name in done:
             test_anomalies.pop(name, None)

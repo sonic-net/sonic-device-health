@@ -28,6 +28,8 @@ sigusr1_raised = False
 sigterm_raised = False
 shutdown_request = False
 
+this_proc_namr = ""
+
 # Poll to exit for general check, including signals
 #
 POLL_TIMEOUT = 2
@@ -140,7 +142,6 @@ class LoMPluginHolder:
         self.touch = None       # Last touch from plugin while running request
         self.touchSent = None   # Last touch that is sent
                                 # touch stores epoch seconds
-        self.plugin_timedout = False
         self.action_pause = config.get(gvars.REQ_PAUSE, None)
 
         try:
@@ -178,16 +179,7 @@ class LoMPluginHolder:
         # If valid, the plugin object exists
         # Thread neutral -- Anyone may call
         #
-        if not self.plugin:
-            return False
-
-        if self.plugin_timedout:
-            taken = time.time() - self.req_start
-            log_error("{}:request is running for {} beyond timeout {} secs".format(
-                self.name, taken, self.last_request.timeout))
-            return False
-
-        return True
+        return self.plugin
 
 
     def do_touch_heartbeat(self, instance_id:str):
@@ -207,6 +199,8 @@ class LoMPluginHolder:
         if self.touchSent != self.touch:
             self.touchSent = self.touch
             clib_bind.touch_heartbeat(self.name, self.instance_id)
+            log_info("plugin_proc:{} plugin:{} Sent heartbeat".
+                    format(this_proc_name, self.name))
     
 
     def set_pipe(self, fdR:int, fdW:int):
@@ -267,18 +261,15 @@ class LoMPluginHolder:
         if self.thr:
             if self.thr.is_alive():
                 # Request thread has not completed yet.
-                if self.plugin_timedout:
-                    taken = time.time() - self.req_start
-                    log_error("{}:request running for {} > timeout{}".
-                            format(self.name, take, self.request.timeout))
+                taken = time.time() - self.req_start
+                log_error("{}:request running for {} > timeout{}".
+                        format(self.name, take, self.request.timeout))
                 return False
 
             # Join to formally close
             #
             self.thr.join(0)
             self.thr = None
-
-        self.plugin_timedout = False
 
         return True
 
@@ -289,9 +280,10 @@ class LoMPluginHolder:
         self._drain_signal()
 
         # Called from main thread, upon receiving signal
-        # May be response or heartbeat
+        # May be response or heartbeat from plugin
         #
         if not self.req_end:
+            log_info("plugin_proc:{} req_end not set".format(this_proc_name))
             self.send_heartbeat()
             return
 
@@ -305,8 +297,8 @@ class LoMPluginHolder:
         self.response = None
         self.req_end = 0
 
-        log_info("{}: request taken:{} process-pause:{}".format(
-            self.name, time.time() - self.req_start, self.action_pause))
+        log_info("plugin_proc:{} plugin:{}: request taken:{} process-pause:{}".format(
+            this_proc_name, self.name, time.time() - self.req_start, self.action_pause))
 
 
     def send_request(self, req:clib_bind.ActionRequest):
@@ -331,23 +323,6 @@ class LoMPluginHolder:
 
         log_info("{}: request submitted".format(self.name))
 
-        if self.last_request.timeout > 0:
-            # Timed request;
-            # Engine waits on timed request, hence no new request is expected.
-            # Hence block until timeout or response, whichever earlier.
-            #
-            signal_rcvd = False
-            while int(time.time() - self.req_start) < self.last_request.timeout:
-                r, _, _ = select.select([self.fdR], [], [], ACTIVE_POLL_TIMEOUT)
-                if self.fdR in r:
-                    signal_rcvd = True
-                    break
-
-            if signal_rcvd:
-                self.handle_response()
-            else:
-                self.plugin_timedout = True
-                log_error("{}:request has and still timed out".format(self.name))
         return
 
     
@@ -369,22 +344,26 @@ def handle_shutdown(active_plugin_holders: {}):
 
 def handle_server_request(active_plugin_holders: {}):
 
-    ret, req = clib_bind.read_action_request()
-    if not ret:
-        log_error("Failed to read server request upon poll") 
-        return
+    # Loop until no more to read
+    while True:
+        log_debug("plugin_proc:{} waiting for server req".format(this_proc_name))
+        ret, req = clib_bind.read_action_request(0)
+        if not ret:
+            log_info("No request from server") 
+            break
 
-    if req.is_shutdown():
-        handle_shutdown(active_plugin_holders)
+        log_info("plugin_proc:{} server req: {}".format(this_proc_name, str(req)))
+        if req.is_shutdown():
+            handle_shutdown(active_plugin_holders)
 
-    elif req.action_name in active_plugin_holders:
-        plugin_holder = active_plugin_holders[req.action_name]
-        if plugin_holder.is_valid():
-            plugin_holder.send_request(req)
+        elif req.action_name in active_plugin_holders:
+            plugin_holder = active_plugin_holders[req.action_name]
+            if plugin_holder.is_valid():
+                plugin_holder.send_request(req)
+            else:
+                log_error("{} is not in valid state to accept request".format(action_name))
         else:
-            log_error("{} is not in valid state to accept request".format(action_name))
-    else:
-        log_error("requested action {} is not loaded".format(action_name))
+            log_error("requested action {} is not loaded".format(action_name))
     return
 
 
@@ -394,7 +373,10 @@ def handle_plugin_holder(plugin_holder: LoMPluginHolder):
 
 
 def main_run(proc_name: str) -> int:
+    global this_proc_name
 
+    this_proc_name = proc_name
+    
     pipe_list = {}
     active_plugin_holders = {}
 
@@ -436,8 +418,13 @@ def main_run(proc_name: str) -> int:
         log_error("No loaded plugin. Exiting. plugins:{}".format(plugins.keys()))
         return -1
 
+    log_info("plugin_proc:{}: All {} plugins loaded. Into reading loop".
+            format(proc_name, len(plugins)))
+
     while not signal_raised:
+        log_debug("plugin_proc: Waiting for data form server / plugin")
         ret = clib_bind.poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
+        log_debug("plugin_proc: data form server ret={}".format(ret))
 
         if ret == -1:
             handle_server_request(active_plugin_holders)
@@ -453,6 +440,7 @@ def main_run(proc_name: str) -> int:
             break
 
 
+    log_info("plugin_proc:{} DONE. Exiting.".format(proc_name))
     # SIGHUP need a reload of everything.
     clib_bind.deregister_client(proc_name)
 

@@ -49,6 +49,15 @@
                         "cnt" : 99
                     },
                     "action_pause": 8
+                },
+                "test-0-action-3": {
+                    "action_name": "test-0-action-3",
+                    "heartbeat_interval": 2,
+                    "action_data": {
+                        "hello": "world",
+                        "cnt" : 99
+                    },
+                    "action_pause": 10
                 }
             },
             "procs_config": {
@@ -59,11 +68,13 @@
                 "proc_0": {
                     "test-0-action-0": "test_action.py",
                     "test-0-action-1": "test_action.py",
-                    "test-0-action-2": "test_action.py"
+                    "test-0-action-2": "test_action.py",
+                    "test-0-action-3": "test_action.py"
                 }
             },
             "bindings_config": {
-                "test-0-action-0": [ "test-0-action-1", "test-0-action-2"]
+                "test-0-action-0": [ "test-0-action-1", "test-0-action-2"],
+                "test-0-action-3": [ "test-0-action-1", "test-0-action-2"]
             },
             "test_plugin_data": {
                 "_description":  [
@@ -95,6 +106,14 @@
                         "0": {
                             "anomaly_key": "DONT_EXPECT_foo_2_bar_2",
                             "action_data": { "foo_2": "bar_2" }
+                        }
+                    }
+                },
+                "test-0-action-3": {
+                    "instances": {
+                        "0": {
+                            "anomaly_key": "foo_3_bar_3",
+                            "action_data": { "foo_3": "bar_3" }
                         }
                     }
                 }
@@ -129,23 +148,41 @@
                     "----------------"
                 ],
                 "test-0-action-0": {
-                    "run_cnt": 2,
+                    "run_cnt": 1,
+                    "mitigation-timeout": 30,
                     "instances": {
                         "0": {
                             "test-0-action-0": {
                                 "instance_id": "id_test_0_action_0",
-                                "timeout": 10,
                                 "action_data": ""
                             },
                             "test-0-action-1": {
-                                "instance_id": "id_test_0_action_1",
-                                "timeout": 5,
+                                "instance_id": "id_test_0_action_0_1",
                                 "action_data": "",
                                 "context": ""
                             },
                             "test-0-action-2": {
-                                "instance_id": "id_test_0_action_2",
-                                "timeout": 6,
+                                "instance_id": "id_test_0_action_0_2",
+                                "action_data": ""
+                            }
+                        }
+                    }
+                },
+                "_test-0-action-3": {
+                    "run_cnt": 1,
+                    "instances": {
+                        "0": {
+                            "test-0-action-3": {
+                                "instance_id": "id_test_0_action_3",
+                                "action_data": ""
+                            },
+                            "test-0-action-1": {
+                                "instance_id": "id_test_0_action_3_1",
+                                "action_data": "",
+                                "context": ""
+                            },
+                            "test-0-action-2": {
+                                "instance_id": "id_test_0_action_3_2",
                                 "action_data": ""
                             }
                         }

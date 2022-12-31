@@ -67,7 +67,7 @@ def c_lib_init() -> bool:
             _clib_touch_heartbeat.restype = c_int
 
             _clib_read_action_request = _clib_dll.read_action_request
-            _clib_read_action_request.argtypes = []
+            _clib_read_action_request.argtypes = [c_int]
             _clib_read_action_request.restype = c_char_p
 
             _clib_write_action_response = _clib_dll.write_action_response
@@ -207,11 +207,11 @@ class ActionRequest:
         return self.type == gvars.REQ_TYPE_SHUTDOWN
 
 
-def read_action_request() -> (bool, ActionRequest):
+def read_action_request(timeout:int = -1) -> (bool, ActionRequest):
     if not validate_dll():
         return False, {}
 
-    req = _clib_read_action_request().decode("utf-8")
+    req = _clib_read_action_request(timeout).decode("utf-8")
 
     if not req:
         e, estr = get_last_error()

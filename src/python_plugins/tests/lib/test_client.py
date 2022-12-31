@@ -143,7 +143,7 @@ class CacheData:
             self.rd_cnt += 1
             return True, ret
         else:
-            log_error("c2s:{} read empty. {}/{}".format(
+            log_info("c2s:{} read empty. {}/{}".format(
                 self.c2s, self.wr_cnt, self.rd_cnt))
             return False, {}
 
@@ -328,14 +328,14 @@ def clib_touch_heartbeat(action_name:bytes, instance_id: bytes) -> int:
     return 0
 
  
-def _read_req() -> bool:
+def _read_req(timeout:int = -1) -> bool:
     if th_local.req:
         return True
 
     req = {}
-    ret = False
-    while not ret:
-        ret, req = th_local.cache_svc.read_from_server()
+    ret, req = th_local.cache_svc.read_from_server(timeout)
+    if not ret:
+        return False
 
     if ((len(req) != 1) or (list(req.keys())[0] != gvars.REQ_ACTION_REQUEST)):
         report_error("Expect ACTION_REQUEST req: {} {}".format(len(req), req.keys()))
@@ -351,15 +351,15 @@ def _read_req() -> bool:
     return True
 
 
-def clib_read_action_request() -> bytes:
+def clib_read_action_request(timeout:int) -> bytes:
     if not _is_initialized():
         report_error("read_action_request: client not registered")
         return
 
     # read and also check if 
-    ret = False
-    while not ret:
-        ret = _read_req()
+    ret = _read_req(timeout)
+    if not ret:
+        return b""
 
     req = json.dumps(th_local.req[gvars.REQ_ACTION_REQUEST]).encode("utf-8")
     th_local.req = None
@@ -410,7 +410,7 @@ def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
         if r:
             if recv_signal_fd in r:
                 # Return only if action matches calling client.
-                _read_req()
+                _read_req(0)
                 if th_local.req:
                     return -1
                 # Continue to poll
