@@ -40,6 +40,7 @@ REQ_RESULT_STR = "result_str"
 REQ_MITIGATION_STATE = "state" 
 REQ_MITIGATION_STATE_INIT = "init"
 REQ_MITIGATION_STATE_PROG = "in-progress"
+REQ_MITIGATION_STATE_TIMEOUT = "timeout"
 REQ_MITIGATION_STATE_DONE = "complete"
 
 # run type

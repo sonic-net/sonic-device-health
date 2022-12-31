@@ -15,6 +15,7 @@ sys.path.append(os.path.join(_CT_DIR, "lib"))
 
 import gvars
 
+POLL_TIMEOUT = 2
 gvars.TEST_RUN = True
 
 import test_client
@@ -28,7 +29,7 @@ TMP_DIR = os.path.join(_CT_DIR, "tmp")
 cfg_dir = ""
 TEST_DATA_FILE = os.path.join(_CT_DIR, "test_data", "test_data.json")
 
-mitigation_lock = threading.Lock()
+mitigation_lock = False
 
 lst_procs = {}
 
@@ -64,6 +65,11 @@ def write_conf(fl, d) -> {}:
     return data
 
 
+LockState_None = 0
+LockState_Locked = 1
+LockState_Pending = 2
+
+
 class AnomalyHandler:
     def __init__(self, action_name:str, action_inp:{}, bindings:[]):
         self.test_run_cnt = action_inp.get("run_cnt", 1)
@@ -82,6 +88,8 @@ class AnomalyHandler:
         self.anomaly_name = action_name
         self.anomaly_published = {}
         self.context = {}
+        self.lock_state = LockState_None
+        self.lock_exp = 0
         log_info("AnomalyHandler: {}: constructed".format(self.anomaly_name))
 
 
@@ -246,16 +254,19 @@ class AnomalyHandler:
 
         if not seq_complete and (self.action_seq_index == 1):
             # Start of mitigation sequence
-            if mitigation_lock.locked():
+            if self.lock_state == LockState_Locked:
                 return_code = -1
                 return_str = "Internal error: Thread has lock before start of mitigation"
                 log_error(return_str)
                 seq_complete = True
             else:
-                # Block until lock acquired
-                mitigation_lock.acquire_lock(self.mitigation_timeout)
+                if self.lock_state != LockState_None:
+                    log_error("AnomalyHandler:{} Expect None lock state {}".format(
+                        self.anomaly_name, self.lock_state))
+                # Resume with lock acquired
+                self.lock_state = LockState_Pending
 
-        if (not seq_complete) and (not mitigation_lock.locked()):
+        if (not seq_complete) and (self.lock_state == LockState_None):
             # lock has timedout
                 return_code = -2
                 return_str = "Mitigation lock timedout"
@@ -263,9 +274,8 @@ class AnomalyHandler:
                 seq_complete = True
 
         if seq_complete:
-            if mitigation_lock.locked():
-                mitigation_lock.release()
-
+            # Release if any lock being held
+            self._manage_lock(False)
             # Re-publish anomaly with completed state
             self.anomaly_published[gvars.REQ_RESULT_CODE] = return_code
             self.anomaly_published[gvars.REQ_RESULT_STR] = return_str
@@ -287,19 +297,57 @@ class AnomalyHandler:
 
         # Build context
         self.context[action_name] = req[gvars.REQ_ACTION_DATA]
+        if self.lock_state == LockState_Locked:
+            self._write_request()
+            log_info("AnomalyHandler: {}: continue mitigation: {}: {}".format(
+                self.anomaly_name, self.action_seq_index, self._get_ct_action_name))
+        else:
+            self.resume()
 
-        # Write request to next action in sequence
-        log_info("AnomalyHandler: to next action{}: {}: {}".format(
-            self.anomaly_name, self.action_seq_index, self._get_ct_action_name))
-        self._write_request()
-        log_debug("INFO: Response 0: Done Action {} != ct {}".format(
-            req[gvars.REQ_ACTION_NAME], action_name))
-        return True
+
+    def _manage_lock(self, acquire:bool):
+        global mitigation_lock
+
+        if acquire:
+            if self.lock_state == LockState_Pending:
+                if mitigation_lock:
+                    # still lock is held by someone. Bail out
+                    log_debug("AnomalyHandler:{} lock pending".format(self.anomaly_name))
+                    return False
+                mitigation_lock = True
+                self.lock_exp = int(time.time()) + self.mitigation_timeout
+                self.lock_state = LockState_Locked
+                return True
+            else:
+                return False
+        elif self.lock_state == LockState_Locked:
+            # release the lock
+            mitigation_lock = False
+            self.lock_exp = 0
+            self.lock_state = LockState_None
+            return True
+        else:
+            return False
+
+
+    def resume(self) -> bool:
+        if self._manage_lock(True):
+            # Write request to next action in sequence
+            self._write_request()
+            log_info("AnomalyHandler: {}: start mitigation: {}".format(
+                self.anomaly_name, self._get_ct_action_name))
+            return True
+
+        elif self.lock_exp and (int(time.time()) > self.lock_exp):
+            self._manage_lock(False)
+            self.anomaly_published[gvars.REQ_RESULT_CODE] = -3
+            self.anomaly_published[gvars.REQ_RESULT_STR] = "Anomaly mitigation timeout"
+            self.anomaly_published[gvars.REQ_MITIGATION_STATE] = gvars.REQ_MITIGATION_STATE_TIMEOUT
+            self._do_publish(self.anomaly_published)
 
 
     def done(self)->bool:
         return self.run_complete
-
 
 def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     global failed
@@ -385,9 +433,13 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         rcnt = 1 + len(v)
 
     reg_conf = {}
+    reg_exp = int(time.time()) + 10    # All registration must complete by 10 seconds
     while rcnt > 0:
         log_debug("MAIN: Waiting for registrations rcnt={}".format(rcnt))
-        ret, data = test_client.server_read_request()
+        tout = reg_exp - int(time.time())
+        if tout < 0:
+            tout = 0
+        ret, data = test_client.server_read_request(tout)
         if not ret:
             report_error("Server: Pending registrations: Failed to read")
             break
@@ -459,45 +511,53 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         log_debug("****** DROP: in loop")
 
         # Read valid request
-        while not ret:
-            ret, req = test_client.server_read_request()
+        while True:
+            ret, req = test_client.server_read_request(POLL_TIMEOUT)
             if not ret:
-                log_error("Error failed to read. Read again")
+                break
             elif (list(req)[0] == gvars.REQ_HEARTBEAT):
                 req_data = req[gvars.REQ_HEARTBEAT]
                 is_heartbeat = True
+                break
             elif (list(req)[0] != gvars.REQ_ACTION_REQUEST):
                 log_error("Internal error. Expected '{}': {}".format(
                     gvars.REQ_ACTION_REQUEST, json.dumps(req)))
-                ret = False
             elif (req[gvars.REQ_ACTION_REQUEST][gvars.REQ_TYPE] !=
                     gvars.REQ_TYPE_ACTION):
                 log_error("Internal error. Expected only {} from client {}".
                         format(gvars.REQ_ACTION_REQUEST, json.dumps(req)))
-                ret = False
                 # clients ony send response 
             else:
                 req_data = req[gvars.REQ_ACTION_REQUEST]
-
-        # Process request. Loop until a handler accepts
-        done = []
-        for name, handler in test_anomalies.items():
-            log_debug("*********** DROP: is_heartbeat={}".format(is_heartbeat))
-            if is_heartbeat:
-                ret = handler.process_plugin_heartbeat(req_data)
-            else:
-                ret = handler.process_plugin_response(req_data)
-                if ret:
-                    if handler.done():
-                        done.append(name)
-            if ret:
-                # request processed
                 break
 
+        # Process request. Loop until a handler accepts
+        if ret:
+            done = []
+            for name, handler in test_anomalies.items():
+                log_debug("*********** DROP: is_heartbeat={}".format(is_heartbeat))
+                if is_heartbeat:
+                    ret = handler.process_plugin_heartbeat(req_data)
+                else:
+                    ret = handler.process_plugin_response(req_data)
+                    if ret:
+                        if handler.done():
+                            done.append(name)
+                if ret:
+                    # request processed
+                    break
+            # drop done anomalies from tracking
+            for name in done:
+                test_anomalies.pop(name, None)
+
+        for name, handler in test_anomalies.items():
+            # Try locking  if pending to proceed with mitigation
+            # Release if curreht lock is expired.
+            # No-op otherwise
+            handler.resume()
+
+
         log_debug("*********** DROP: go for next")
-        # drop done anomalies from tracking
-        for name in done:
-            test_anomalies.pop(name, None)
 
     test_client.server_write_request({gvars.REQ_ACTION_REQUEST: {gvars.REQ_TYPE: gvars.REQ_TYPE_SHUTDOWN}})
 

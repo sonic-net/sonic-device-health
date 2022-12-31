@@ -428,10 +428,12 @@ def clib_poll_for_data(fds:[int], cnt:int, timeout: int) -> int:
 def server_read_request(timeout:int = -1) -> (bool, {}):
     lst = list(rd_fds.keys())
     r = _poll(lst, timeout)
+    if not r:
+        return False, {}
 
     ret, d = rd_fds[r[0]].read_from_client(0)
-    log_debug("server_read_request: ret={} req={}".format(
-        ret, str(d)))
+    log_debug("server_read_request: ret={} req={}".format(ret, str(d)))
+
     if not ret:
         return False, {}
     if len(d) != 1:
