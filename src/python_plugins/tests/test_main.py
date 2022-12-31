@@ -191,12 +191,12 @@ class AnomalyHandler:
         action_name = self._get_ct_action_name()
         if req[gvars.REQ_ACTION_NAME] != action_name:
             log_debug("INFO: Skip mismatch Action {} != ct {}".format(
-                req[REQ_ACTION_NAME], action_name))
+                req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
             log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
-                req[REQ_ACTION_NAME], action_name))
+                req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         log_info("AnomalyHandler: Read response {}: {}".format(

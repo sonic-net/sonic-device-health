@@ -28,7 +28,7 @@ sigusr1_raised = False
 sigterm_raised = False
 shutdown_request = False
 
-this_proc_namr = ""
+this_proc_name = ""
 
 # Poll to exit for general check, including signals
 #

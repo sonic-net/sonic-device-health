@@ -168,7 +168,7 @@
                         }
                     }
                 },
-                "_test-0-action-3": {
+                "test-0-action-3": {
                     "run_cnt": 1,
                     "instances": {
                         "0": {

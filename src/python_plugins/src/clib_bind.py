@@ -192,6 +192,7 @@ def _update_globals():
 
 class ActionRequest:
     def __init__(self, sdata: str):
+        self.str_data = sdata
         data = json.loads(sdata)
         self.type = data[gvars.REQ_TYPE]
         if self.type == gvars.REQ_TYPE_ACTION:
@@ -202,6 +203,8 @@ class ActionRequest:
             self.context = data[gvars.REQ_CONTEXT]
             self.timeout = data[gvars.REQ_TIMEOUT]
 
+    def __repr__(self):
+        return self.str_data
 
     def is_shutdown(self) -> bool:
         return self.type == gvars.REQ_TYPE_SHUTDOWN
@@ -242,6 +245,9 @@ class ActionResponse:
                 gvars.REQ_RESULT_STR : result_str })
 
                 
+    def __repr__(self) -> str:
+        return self.data 
+
     def value(self) -> str:
         return self.data 
 
