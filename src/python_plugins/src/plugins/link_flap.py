@@ -11,7 +11,7 @@ class LoMPlugin:
         self.flap_int = 15
         self.flap_cnt = 2
         self.flaps = {}
-        self.shutdown = False
+        self.shutdown_flag = False
         self.hb_callback = fn_hb
         self.hb_int = config.get(gvars.REQ_HEARTBEAT_INTERVAL, 2)
         self.handle = events_init_subscriber(recv_timeout=(self.hb_int * 1000))
@@ -33,7 +33,7 @@ class LoMPlugin:
             })
 
     def request(self, req: clib_bind.ActionRequest) -> clib_bind.ActionResponse:
-        while True and (not self.shutdown):
+        while True and (not self.shutdown_flag):
             evt = event_receive_op_t()
             ret = event_receive(self.handle, evt)
             if (ret == 0) and (evt.key == 'sonic-events-swss:if-state'):
@@ -50,19 +50,17 @@ class LoMPlugin:
 
                     if len(lst) == self.flap_cnt:
                         interval = lst[-1] - lst[0]
-                        log_error("ifname={} interval={}".format(ifname, interval))
                         if interval <= self.flap_int:
                             log_error("reporting anomsaly for {}".format(ifname))
                             return clib_bind.ActionResponse(self.name, req.instance_id,
                                     req.anomaly_instance_id, ifname,
                                     self._get_resp(ifname, interval), 0, "")
-            time.sleep(self.hb_int)
             self.hb_callback(req.instance_id)
 
 
 
     def shutdown(self):
-        self.shutdown = True
+        self.shutdown_flag = True
 
 
 

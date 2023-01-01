@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+# Way to test plugins as standalone
+#
 import sys
 
 sys.path.append("..")

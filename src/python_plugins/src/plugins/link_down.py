@@ -9,7 +9,7 @@ class LoMPlugin:
     def __init__(self, config: {}, fn_hb):
         self.name = "link_down"
         self.handle = events_init_subscriber()
-        self.shutdown = False
+        self.shutdown_flag = False
 
 
     def getName(self) -> str:
@@ -38,7 +38,7 @@ class LoMPlugin:
 
 
     def shutdown(self):
-        self.shutdown = True
+        self.shutdown_flag = True
 
 
 

@@ -346,7 +346,6 @@ def handle_server_request(active_plugin_holders: {}):
 
     # Loop until no more to read
     while True:
-        log_debug("plugin_proc:{} waiting for server req".format(this_proc_name))
         ret, req = clib_bind.read_action_request(0)
         if not ret:
             log_info("No request from server") 
@@ -422,9 +421,7 @@ def main_run(proc_name: str) -> int:
             format(proc_name, len(plugins)))
 
     while not signal_raised:
-        log_debug("plugin_proc: Waiting for data form server / plugin")
         ret = clib_bind.poll_for_data(list(pipe_list.keys()), POLL_TIMEOUT)
-        log_debug("plugin_proc: data form server ret={}".format(ret))
 
         if ret == -1:
             handle_server_request(active_plugin_holders)
@@ -489,10 +486,13 @@ if __name__ == "__main__":
             help="Path of the global rc file")
     parser.add_argument("-t", "--test", action='store_true',
             help="Run in test mode", default=False)
+    parser.add_argument("-l", "--log-level", type=int, default=3, help="set log level")
     args = parser.parse_args()
 
     if args.test:
         set_test_mode()
+
+    set_log_level(args.log_level)
 
     main(args.proc_name, args.global_rc)
 

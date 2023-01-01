@@ -432,7 +432,6 @@ def server_read_request(timeout:int = -1) -> (bool, {}):
         return False, {}
 
     ret, d = rd_fds[r[0]].read_from_client(0)
-    log_debug("server_read_request: ret={} req={}".format(ret, str(d)))
 
     if not ret:
         return False, {}

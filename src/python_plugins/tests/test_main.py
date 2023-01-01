@@ -2,12 +2,13 @@
 
 # TODO: Get anomaly key
 import argparse
+import importlib
 import json
 import os
 import sys
 import threading
 import time
-import importlib
+import uuid
 
 _CT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(_CT_DIR, "..", "src"))
@@ -106,10 +107,7 @@ class AnomalyHandler:
         if attr_name == "run_cnt":
             return 1
         if attr_name == gvars.REQ_INSTANCE_ID:
-            idx = self.instance_id_index
-            self.instance_id_index += 1
-            return "id_{}_run_{}_idx_{}".format(self.anomaly_name,
-                    self.test_run_index, idx)
+            return str(uuid.uuid4())
         if attr_name == gvars.REQ_TIMEOUT:
             return 0        # No timeout
         if attr_name in [gvars.REQ_ACTION_DATA, gvars.REQ_CONTEXT,
@@ -156,8 +154,6 @@ class AnomalyHandler:
             gvars.REQ_CONTEXT: self.context,
             gvars.REQ_TIMEOUT: self._get_inst_val(gvars.REQ_TIMEOUT)}}
         test_client.server_write_request(req)
-        log_debug("AnomalyHandler: Written request {}: {}".
-                format(self.anomaly_name, str(req)))
         return 
 
 
@@ -168,13 +164,9 @@ class AnomalyHandler:
     def process_plugin_heartbeat(self, req:{}) -> bool:
         action_name = self._get_ct_action_name()
         if req[gvars.REQ_ACTION_NAME] != action_name:
-            log_debug("INFO: Heartbeat: Skip mismatch Action {} != ct {}".format(
-                req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
-            log_debug("INFO: Heartbeat: Skip mismatch instance-id {} != ct {}".format(
-                req[gvars.REQ_INSTANCE_ID], self.ct_instance_id))
             return False
 
         if not self.anomaly_published:
@@ -185,8 +177,6 @@ class AnomalyHandler:
 
         data[gvars.REQ_HEARTBEAT] = str(time.time())
         self._do_publish(data)
-        log_debug("INFO: Heartbeat: Done Action {} != ct {}".format(
-            req[gvars.REQ_ACTION_NAME], action_name))
         return True
 
 
@@ -198,13 +188,9 @@ class AnomalyHandler:
     def process_plugin_response(self, req:{}) -> bool:
         action_name = self._get_ct_action_name()
         if req[gvars.REQ_ACTION_NAME] != action_name:
-            log_debug("INFO: Skip mismatch Action {} != ct {}".format(
-                req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         if req[gvars.REQ_INSTANCE_ID] != self.ct_instance_id:
-            log_debug("INFO: Skip mismatch instance-id {} != ct {}".format(
-                req[gvars.REQ_ACTION_NAME], action_name))
             return False
 
         log_info("AnomalyHandler: Read response {}: {}".format(
@@ -312,7 +298,7 @@ class AnomalyHandler:
             if self.lock_state == LockState_Pending:
                 if mitigation_lock:
                     # still lock is held by someone. Bail out
-                    log_debug("AnomalyHandler:{} lock pending".format(self.anomaly_name))
+                    log_info("AnomalyHandler:{} lock pending".format(self.anomaly_name))
                     return False
                 mitigation_lock = True
                 self.lock_exp = int(time.time()) + self.mitigation_timeout
@@ -435,7 +421,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     reg_conf = {}
     reg_exp = int(time.time()) + 10    # All registration must complete by 10 seconds
     while rcnt > 0:
-        log_debug("MAIN: Waiting for registrations rcnt={}".format(rcnt))
+        log_info("MAIN: Waiting for registrations rcnt={}".format(rcnt))
         tout = reg_exp - int(time.time())
         if tout < 0:
             tout = 0
@@ -455,7 +441,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
 
             reg_conf[cl_name] = []
             rcnt -= 1
-            log_debug("MAIN: Registered client {}".format(cl_name))
+            log_info("MAIN: Registered client {}".format(cl_name))
 
         elif key == gvars.REQ_REGISTER_ACTION:
             cl_name, action_name = test_client.parse_reg_action(val)
@@ -470,7 +456,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
                 break
             lst.append(action_name)
             rcnt -= 1
-            log_debug("MAIN: Registered client:{} action:{}".format(cl_name, action_name))
+            log_info("MAIN: Registered client:{} action:{}".format(cl_name, action_name))
         else:
             report_error("server: In middle of vetting registration cnt={} req={}"
                     .format(rcnt, json.dumps(data, indent=4)))
@@ -498,7 +484,7 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         test_anomalies[anomaly_action] = AnomalyHandler(
                 anomaly_action, v, bindings_conf[anomaly_action])
 
-    log_debug("Main: Starting anomaly handlers")
+    log_info("Main: Starting anomaly handlers")
     for name, handler in test_anomalies.items():
         if not handler.start():
             report_error("Failed to start anomaly {}".format(name))
@@ -508,7 +494,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
     while test_anomalies:
         ret = False
         is_heartbeat = False
-        log_debug("****** DROP: in loop")
 
         # Read valid request
         while True:
@@ -535,7 +520,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
         if ret:
             done = []
             for name, handler in test_anomalies.items():
-                log_debug("*********** DROP: is_heartbeat={}".format(is_heartbeat))
                 if is_heartbeat:
                     ret = handler.process_plugin_heartbeat(req_data)
                 else:
@@ -557,7 +541,6 @@ def run_a_testcase(test_case:str, testcase_data:{}, default_data:{}):
             handler.resume()
 
 
-        log_debug("*********** DROP: go for next")
 
     test_client.server_write_request({gvars.REQ_ACTION_REQUEST: {gvars.REQ_TYPE: gvars.REQ_TYPE_SHUTDOWN}})
 
@@ -599,9 +582,12 @@ def main():
     parser=argparse.ArgumentParser(description="Main test code")
     parser.add_argument("-p", "--path", default=TMP_DIR, help="test runtime path")
     parser.add_argument("-t", "--testcase", default="", help="test case name; Else all tests are run")
+    parser.add_argument("-l", "--log-level", type=int, default=3, help="set log level")
     args = parser.parse_args()
 
     TMP_DIR = args.path
+
+    set_log_level(args.log_level)
 
     test_data = {}
     default_data = {}

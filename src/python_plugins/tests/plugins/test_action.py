@@ -34,7 +34,6 @@ class LoMPlugin:
         self.req_idx = 0
         self.plugin_inst_index = 0
         self.plugin_instances = get_plugin_data(self.action_name).get("instances", {})
-        log_debug("test_action.py: LoMPlugin created for {}".format(self.action_name))
         
 
     def getName(self) -> str:
