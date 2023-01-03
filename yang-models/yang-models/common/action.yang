@@ -1,0 +1,198 @@
+module actions {
+    namespace "http://github.com/sonic-net/actions";
+    prefix actcmn;
+    yang-version 1.1;
+
+    import ietf-yang-types {
+        prefix yang;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "actions definition";
+
+    revision 2022-12-01 {
+        description "An action definition applicable to all action types";
+    } 
+
+    typedef action-types {
+        type enumeration {
+            enum anomaly;
+            enum safety-check;
+            enum mitigation;
+        }
+        description "Type of action";
+    }
+
+    grouping actions-cmn-config {
+        leaf timeout {
+            type uint16;
+            units seconds;
+            configure true;
+            description "
+                For safety-checks & mitigtions this sets the max time within
+                which the corresponding plugin should return, else the action is
+                aborted.
+                For anomalies, this sets the max wait time to kick off the mitigation
+                run. Normally the mitigation/safety-checks kicks off instantly, but
+                if another miitigation is running, this stay in pending state for 
+                max time as this timeout. If mitigation is not kicked off, the
+                run is aborted and failure to mitigate is published stating reason
+                as timeout.
+
+                <= 0 - No timeout
+                > 0 - Time to complete in seconds
+                timeout.";
+            default 0;
+        }
+
+        leaf heartbeat-interval {
+            type uint8;
+            configure true;
+            description "
+                Engine has a default heartbeat frequencies as one for idle time
+                implying no active anomalies and one for an active anomaly that has
+                mitigation in progress. The active anomaly heartbeat interval will
+                be shorter than one for idle time. An action can do a override.";
+            default 0;
+        }
+
+        leaf disable {
+            type boolean;
+            default false;
+            configure true;
+            base-entity true;
+            description "Disable just this action. Disable = true overrides
+                any, including global switch value for disable.
+                base-entity implies that it is not part of action specific param.";
+        }
+
+        leaf mimic {
+            type boolean;
+            default false;
+            configure true;
+            base-entity true;
+            description "
+                Applicable to mitigations only; Run normally but skip making any changes to switch.
+                The action will publish o/p but with return code stating mimicked.
+                This will provide a great way to have dry runs.
+                base-entity implies that it is not part of action specific param.";
+        }
+    }
+
+    container LoM-Action {
+        leaf timestamp {
+            type yang:date-and-time;
+            description "time of the event";
+        }
+        leaf instance-id {
+            type yang:uuid;
+            description "UUID for this instance";
+        }
+        leaf anomaly-instance-id {
+            type yang:uuid;
+            description "UUID for corresponding anomaly instance";
+        }
+        leaf anomaly-key {
+            type string;
+            description "String that will be the same across recurrence.
+                e.g. In case of link CRC error, the key could be i/f name.
+                Any/all occurrences of CRC error on a link will have the same key.
+                This can be used to assess recurrence frequency.
+                It is anomaly deduction algorithm's responsibility to make/coin this
+                string which will be the same across all recurrences.
+                No explicit guidelines on the string coining/formatting";
+        }
+        leaf action-type {
+            type action-types
+        }
+
+        uses actions-cmn-config;
+
+        leaf action-data {
+            description "Action specific data, totally depends on action name";
+
+            type union {
+                type leafref {
+                    path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-discard";
+                }
+                type leafref {
+                    path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-disparity";
+                }
+                type leafref {
+                    path "/anmdhcp:anomalies-dhcp-relay/anmdhcp:dhcp-relay-bind-failure";
+                }
+                type leafref {
+                    path "/svcrst:mitigations-service-restart/svcrst:service-restart";
+                }
+                type leafref {
+                    path "/svcchk:safetychecks-service-restart/svcchk:service-restart";
+                }
+            }
+        }
+
+        leaf mitigation-state {
+            type enumeration {
+                enum INIT;
+                enum PENDING;
+                enum IN-PROGRESS;
+                enum COMPLETE;
+                enum NO-LOCAL-MITIGATION;
+            }
+            description "Anomaly with mitigation available
+                will move as INIT --> [ PENDING -->] [ IN-PROGRESS -->] COMPLETE
+                PENDING will not be fired, if no other anomaly is in progress.
+                IN-PROGRESS may not be fired, if mitigation is complete before
+                heartbeat duration. If mitigation takes longer than (N * heartbeat-interval)
+                then IN-PROGRESS gets published N times. So one may expect >= 2 count of 
+                anomaly re-publish.
+                If no mitigation is available, it will be published only once with
+                state = NO-LOCAL-MITIGATION
+
+                Applicable to Anomaly actions only.";
+        }
+        leaf result-code {
+            type uint32;
+            description "Action run result";
+        }
+        leaf result-string {
+            type string;
+            description "Human readable result as string";
+        }
+    }
+
+    extension EVENT_SEVERITY_2 {
+        description
+            "Indicates that the severity level of this type of event is 2";
+    }
+
+     extension EVENT_SEVERITY_3 {
+        description
+            "Indicates that the severity level of this type of event is 3";
+    }
+
+     extension EVENT_SEVERITY_4 {
+        description
+            "Indicates that the severity level of this type of event is 4";
+    }
+
+    extension ALARM_SEVERITY_MINOR {
+        description
+            "Indicates the existence of a non-service affecting fault condition 
+             and that corrective action should be taken in order to prevent a more serious
+             (for example, service affecting) fault. Such a severity can be reported, 
+             for example, when the detected alarm condition is not currently degrading the capacity of the resource";
+    }
+
+    extension ALARM_SEVERITY_MAJOR {
+        description
+            "Indicates that a service affecting condition has developed and an urgent corrective 
+             action is required. Such a severity can be reported, for example, when there is a severe 
+             degradation in the capability of the resource and its full capability must be restored.";
+    }
+}

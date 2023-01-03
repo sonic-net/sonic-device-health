@@ -1,0 +1,56 @@
+module local-action-binding {
+    namespace "http://github.com/sonic-net/sonic-action-binding";
+    prefix actbnd;
+    yang-version 1.1;
+
+    import ietf-yang-types {
+        prefix yang;
+    }
+
+    organization
+        "SONiC";
+
+    contact
+        "SONiC";
+
+    description
+        "actions binding definition";
+
+    revision 2022-12-01 {
+        description
+            "Binding schema";
+    } 
+
+    container LOCAL-ACTION-BINDING {
+        description "List of bindings";
+        
+        list bindings-list {
+
+            key "ACTION-NAME";
+
+            leaf ACTION-NAME {
+                type string;
+                description "Fully qualified ame of the action as
+                    <yang module name>:<container name>";
+            }
+            leaf binding_precedes {
+                type boolean
+                description "Does the actions that bind precede this action or follow";
+            }
+
+            list bindings {
+                key "sequence"
+                
+                leaf sequence {
+                    type uint8;
+                    description "Order of running. Lower sequence go before higher";
+                }
+        
+                leaf-list actions {
+                    type string;
+                    description "Fully qualified ame of the action";
+                }
+            } 
+        } 
+    }
+}

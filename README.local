@@ -1,0 +1,69 @@
+config dirs:
+   /etc/LoM/config
+   /etc/LoM/config/static
+   /etc/LoM/config/running
+
+plugin_proc:
+    1.  A plugin is an implementation of an action.
+    2.  A plugin-proc runs/manages a set of actions.
+        Actions are grouped.
+        A plugin proc runs/manages all actions per group.
+
+        plugin_procs_actions.conf.json
+        {
+            "python": {
+                <proc name>: [ <list of plugins with path managed by this process> ]
+                "python_plugin_proc-anomaly": [ "python_plugins/anomalies/dhcp_relay_disparity_check.py", "python_plugins/anomalies/dhcp_relay_discard_check.py"]
+            }
+            ...
+        }
+        Expect from running config dir
+
+    3.  Proc learns action name & type upon loading the plugin. It also reads version and used
+        if multiple plugins register for the same
+
+    4.  Every action needs complete data per YANG schema + CONFIG-DB tweak
+        actions.conf.json:
+        {
+            <Action-name> : { <config which includes enable info> }
+        }
+        Expect from running config dir
+
+    5. Expect the config to be available, else sleep until available.
+   
+
+Build time:
+    1.  Every action is mandatorily defined by YANG schema
+    2.  Every configurable field carries a default value
+    3.  Build generates actions.conf with config for each based on schema
+    4.  This is the static file present in the container image as RO and pre-built.
+    5.  Expects binding config checked in for planned anomalies.
+        Only anomalies with bindings can be mitigated.
+    6.  Plugin_proc.conf is expected which registers a plugin against a proc
+        Only plugins that are tied to a process are invoked.
+
+   
+start.sh:
+    1. creates all running config as static-pre-built + CONFIG-DB
+        plugin_procs_actions.conf.json
+        actions.conf.json
+        action-bindings.conf.json
+
+    2. CONFIG-DB is single source of truth for updates over static-pre-built
+
+    3. Update STATE-DB with running config
+
+    4. P0 -- Any config-update needs service restart
+
+Phase 0:
+    Plugin updates are possible via entire service update only.
+
+
+Phase 1:
+    ???
+
+    Plugin update -- Copy into container; Update static files and restart.
+
+
+
+
