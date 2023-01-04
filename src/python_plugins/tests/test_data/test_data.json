@@ -1,5 +1,6 @@
 {
     "default": {
+        "_description": "Global rc files provides key data on path, filenames, ...",
         "global_rc": {
             "config_running_path":  "/tmp",
             "config_static_path":  ".,/config/",
@@ -21,7 +22,8 @@
             ],
             "actions_config": {
                 "_description": [
-                   "Action names should start with alpha [a-z]"
+                   "Action names should start with alpha [a-z]",
+                   "Individual configurations for each action can be added here"
                 ], 
                 "test-0-action-0": {
                     "action_name": "test-0-action-0",
@@ -131,13 +133,13 @@
                     "Instances can be empty, in which case all defaulted",
                     "instances -- List of runs per anomaly",
                     "Each instance:",
-                    "key: instance id as string. Default: computed",
+                    "key: test instance id ",
                     "Value:",
                     "   timeout = <timeout for anomaly to return. Base it off pause.",
                     "               <= 0 no timeout; > 0 timeout in seconds",
                     "               Default: No timeout",
                     "               Required for test action. Don't provide for real action",
-                    "   instance_id -- Instance ID to use for anomaly. Default: computed",
+                    "   instance_id -- Instance ID to use for action. Default: computed",
                     "   action_data: Expected action resp from plugin for comparison. Optional",
                     "                   None / absence implies no comparison",
                     "   result-code: Expected result-code. Optional; None implies no comparison",

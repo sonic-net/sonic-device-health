@@ -6,6 +6,6 @@ then
 else
     outf="$1.tar.gz"
 fi
-
-find ./ -name \*.json -o -name \*.py -print0 | tar -cvzf ${outf} --null --files-from -
+rm -f ${outf}
+find ./ -type f \( -iname \*.json -o -iname \*.py \) -print0 | tar -cvzf ${outf} --null --files-from -
 echo "Created ${outf}"
