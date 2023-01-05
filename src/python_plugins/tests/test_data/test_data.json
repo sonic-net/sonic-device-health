@@ -9,7 +9,7 @@
             "actions_config_name": "actions_conf.json",
             "actions_binding_config_name": "actions_binding.json",
             "plugins_data_name": "plugins_data.json",
-            "plugin_paths": [ ".", "./plugins", "../tests/plugins", "../tests/lib", "./vendor/sonic" ]
+            "plugin_paths": [ ".", "./vendors/sonic/actions", "./vendors/sonic/support", "../tests/plugins", "../tests/lib" ]
         }
     },
     "test_cases": {
@@ -60,6 +60,16 @@
                         "cnt" : 99
                     },
                     "action_pause": 10
+                },
+                "link_flap": {
+                    "action_name": "link_flap",
+                    "min": 80
+                },
+                "link_safety": {
+                    "action_name": "link_safety"
+                },
+                "link_down": {
+                    "action_name": "link_down"
                 }
             },
             "procs_config": {
@@ -68,6 +78,11 @@
                     "This is needed to use test_client lib"
                 ],
                 "proc_0": {
+                    "link_flap": "link_flap.py",
+                    "link_safety": "link_safety.py",
+                    "link_down": "link_down.py"
+                },
+                "_proc_0": {
                     "test-0-action-0": "test_action.py",
                     "test-0-action-1": "test_action.py",
                     "test-0-action-2": "test_action.py",
@@ -76,7 +91,8 @@
             },
             "bindings_config": {
                 "test-0-action-0": [ "test-0-action-1", "test-0-action-2"],
-                "test-0-action-3": [ "test-0-action-1", "test-0-action-2"]
+                "test-0-action-3": [ "test-0-action-1", "test-0-action-2"],
+                "link_flap": [ "link_safety", "link_down" ]
             },
             "test_plugin_data": {
                 "_description":  [
@@ -149,7 +165,21 @@
                     "   Every entry is optional",
                     "----------------"
                 ],
-                "test-0-action-0": {
+                "link_flap": {
+                    "run_cnt": 1,
+                    "mitigation_timeout": 30,
+                    "instances": {
+                        "0": {
+                            "link_flap": {
+                            },
+                            "link_safety": {
+                            },
+                            "link_down": {
+                            }
+                        }
+                    }
+                },
+                "_test-0-action-0": {
                     "run_cnt": 1,
                     "mitigation_timeout": 30,
                     "instances": {
@@ -170,7 +200,7 @@
                         }
                     }
                 },
-                "test-0-action-3": {
+                "_test-0-action-3": {
                     "run_cnt": 1,
                     "instances": {
                         "0": {

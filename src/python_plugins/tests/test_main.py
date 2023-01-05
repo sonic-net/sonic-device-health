@@ -14,6 +14,13 @@ _CT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(_CT_DIR, "..", "src"))
 sys.path.append(os.path.join(_CT_DIR, "lib"))
 
+helper_dir = None
+if os.path.exists("/etc/sonic"):
+    helper_dir = "../src/vendors/sonic/support/"
+else:
+    helper_dir = "../src/vendors/sonic/support/"
+sys.path.append(os.path.join(_CT_DIR, helper_dir))
+
 import gvars
 
 POLL_TIMEOUT = 2
