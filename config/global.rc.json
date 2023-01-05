@@ -1,8 +1,0 @@
-{
-    "config_root_path": "/etc/LoM/config",
-    "config_static_sub": "static",
-    "config_current_sub": "current",
-    "proc_plugins_conf_name": "proc_plugins_conf.json"
-    "actions_config_name": "actions_conf.json"
-    "actions_binding_config_name": "actions_binding_conf.json"
-}
